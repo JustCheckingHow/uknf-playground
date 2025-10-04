@@ -17,6 +17,7 @@ import AnnouncementsPage from '@/pages/dashboard/AnnouncementsPage';
 import LibraryPage from '@/pages/dashboard/LibraryPage';
 import AccessRequestsPage from '@/pages/dashboard/AccessRequestsPage';
 import SettingsPage from '@/pages/dashboard/SettingsPage';
+import GroupManagementPage from '@/pages/dashboard/GroupManagementPage';
 
 export default function App() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
                 <Route path="announcements" element={<AnnouncementsPage />} />
                 <Route path="library" element={<LibraryPage />} />
                 <Route path="access-requests" element={<AccessRequestsPage />} />
+                <Route path="groups" element={<GroupManagementPage />} />
                 <Route path="settings" element={<SettingsPage />} />
               </Route>
             </Route>

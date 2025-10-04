@@ -194,7 +194,7 @@ export default function LibraryPage() {
         </p>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6">
         <Card className="space-y-4">
           <div className="flex items-center gap-2">
             <Upload size={18} className="text-primary" />

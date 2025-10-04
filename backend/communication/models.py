@@ -4,7 +4,7 @@ from django.conf import settings
 from django.db import models
 from django.utils import timezone
 
-from accounts.models import RegulatedEntity
+from accounts.models import RegulatedEntity, UserGroup
 
 
 class Report(models.Model):
@@ -115,18 +115,45 @@ class MessageThread(models.Model):
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="created_threads")
     is_internal_only = models.BooleanField(default=False)
     is_global = models.BooleanField(default=False)
+    target_group = models.ForeignKey(
+        UserGroup,
+        on_delete=models.SET_NULL,
+        related_name="message_threads",
+        null=True,
+        blank=True,
+    )
+    target_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        related_name="targeted_threads",
+        null=True,
+        blank=True,
+    )
     participants = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name="message_threads", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
-    def add_message(self, *, sender, content: str, attachments: list[str] | None = None, is_internal_note: bool = False) -> "Message":
+    def add_message(
+        self,
+        *,
+        sender,
+        content: str,
+        attachment=None,
+        is_internal_note: bool = False,
+        recipient=None,
+    ) -> "Message":
         message = Message.objects.create(
             thread=self,
             sender=sender,
             body=content,
-            attachments=attachments or [],
+            attachment=attachment,
             is_internal_note=is_internal_note,
+            recipient=recipient,
         )
+        if sender:
+            self.participants.add(sender)
+        if recipient:
+            self.participants.add(recipient)
         self.updated_at = timezone.now()
         self.save(update_fields=["updated_at"])
         return message
@@ -139,8 +166,15 @@ class Message(models.Model):
     thread = models.ForeignKey(MessageThread, on_delete=models.CASCADE, related_name="messages")
     sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
     body = models.TextField()
-    attachments = models.JSONField(default=list, blank=True)
+    attachment = models.FileField(upload_to="communication/messages/", null=True, blank=True)
     is_internal_note = models.BooleanField(default=False)
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="received_messages",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

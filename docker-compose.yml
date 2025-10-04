@@ -25,6 +25,10 @@ services:
       DATABASE_URL: postgres://uknf:uknf@db:5432/uknf
       DJANGO_CORS_ORIGINS: http://localhost:3000,http://localhost:8123
       DJANGO_DEBUG: "true"
+    command: >-
+      sh -c "python manage.py makemigrations --merge --noinput &&
+      python manage.py migrate --noinput &&
+      gunicorn uknf_platform.wsgi:application --bind 0.0.0.0:80"
     ports:
       - "8123:80"
     depends_on:
