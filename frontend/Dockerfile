@@ -3,11 +3,14 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
+# Ensure NODE_ENV is not set to production during build
+ENV NODE_ENV=development
+ENV NEXT_TELEMETRY_DISABLED=1
+
 COPY package*.json ./
 RUN npm install --legacy-peer-deps
 
 COPY . .
-ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
 FROM node:20-alpine AS production
