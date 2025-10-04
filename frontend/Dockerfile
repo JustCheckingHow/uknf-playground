@@ -11,8 +11,8 @@ FROM base AS dev
 ENV NODE_ENV=development
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-EXPOSE 3000
-CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0", "--port", "3000"]
+EXPOSE 80
+CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0", "--port", "80"]
 
 FROM base AS builder
 # Ensure devDependencies are available during the build
@@ -31,5 +31,5 @@ COPY package.json ./package.json
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
-EXPOSE 3000
+EXPOSE 80
 CMD ["npm", "run", "start"]
