@@ -7,12 +7,15 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 
+import Select from 'react-select';
+
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { DataTable } from '@/components/ui/DataTable';
-import { Badge } from '@/components/ui/Badge';
 import { apiClient } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
+import { select2Styles, type SelectOption } from '@/components/ui/select2Styles';
 import type { Report, ReportValidationIssue } from '@/types';
 
 const schema = z.object({
@@ -41,6 +44,9 @@ export default function ReportsPage() {
   const [activeReportId, setActiveReportId] = useState<number | null>(null);
   const [uploadingId, setUploadingId] = useState<number | null>(null);
   const [submittingId, setSubmittingId] = useState<number | null>(null);
+  const [titleFilter, setTitleFilter] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [validationFilter, setValidationFilter] = useState<string | null>(null);
   const fileInputsRef = useRef<Record<number, HTMLInputElement | null>>({});
 
   const submitReportMutation = useMutation({
@@ -138,6 +144,45 @@ export default function ReportsPage() {
   };
 
   const reports = reportsQuery.data ?? [];
+  const titleOptions = useMemo<SelectOption[]>(() => {
+    const uniqueTitles = Array.from(new Set(reports.map((report) => report.title)));
+    return uniqueTitles
+      .map((title) => ({ value: title, label: title }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'pl'));
+  }, [reports]);
+  const statusOptions = useMemo<SelectOption[]>(() => {
+    const uniqueStatuses = Array.from(new Set(reports.map((report) => report.status)));
+    return uniqueStatuses
+      .map((status) => ({ value: status, label: mapReportStatus(status) }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'pl'));
+  }, [reports]);
+  const validationOptions = useMemo<SelectOption[]>(() => {
+    const uniqueValidationStatuses = Array.from(
+      new Set(reports.map((report) => report.validation?.status ?? 'none'))
+    );
+    return uniqueValidationStatuses
+      .map((status) => ({
+        value: status,
+        label: status === 'none' ? 'Brak walidacji' : mapValidationStatus(status)
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'pl'));
+  }, [reports]);
+  const filteredReports = useMemo(() => {
+    return reports.filter((report) => {
+      if (titleFilter && report.title !== titleFilter) {
+        return false;
+      }
+      if (statusFilter && report.status !== statusFilter) {
+        return false;
+      }
+      const validationStatus = report.validation?.status ?? 'none';
+      if (validationFilter && validationStatus !== validationFilter) {
+        return false;
+      }
+      return true;
+    });
+  }, [reports, statusFilter, titleFilter, validationFilter]);
+  const displayedReports = filteredReports;
   const activeReport = useMemo(() => {
     if (!reports.length) {
       return null;
@@ -148,8 +193,9 @@ export default function ReportsPage() {
         return selected;
       }
     }
-    return reports.find((item) => item.validation) ?? reports[0] ?? null;
-  }, [activeReportId, reports]);
+    const fallbackDataset = displayedReports.length ? displayedReports : reports;
+    return fallbackDataset.find((item) => item.validation) ?? fallbackDataset[0] ?? null;
+  }, [activeReportId, displayedReports, reports]);
   const activeMetadata = useMemo(() => {
     if (!activeReport?.validation?.metadata) {
       return {} as Record<string, string | number | null | undefined>;
@@ -218,10 +264,68 @@ export default function ReportsPage() {
       </Card>
 
       <div className="space-y-3">
-        <h2 className="text-lg font-semibold text-slate-900">Sprawozdania</h2>
+        <div className="flex flex-col gap-3">
+          <h2 className="text-lg font-semibold text-slate-900">Sprawozdania</h2>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="flex flex-col gap-1 text-sm">
+              <label htmlFor="reports-title-filter" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Tytuł
+              </label>
+              <Select<SelectOption>
+                inputId="reports-title-filter"
+                classNamePrefix="select2"
+                placeholder="Wszystkie tytuły"
+                styles={select2Styles}
+                isClearable
+                isDisabled={!titleOptions.length}
+                options={titleOptions}
+                value={titleOptions.find((option) => option.value === titleFilter) ?? null}
+                onChange={(option) => setTitleFilter(option ? option.value : null)}
+                noOptionsMessage={() => 'Brak wyników'}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1 text-sm">
+              <label htmlFor="reports-status-filter" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Status
+              </label>
+              <Select<SelectOption>
+                inputId="reports-status-filter"
+                classNamePrefix="select2"
+                placeholder="Wszystkie statusy"
+                styles={select2Styles}
+                isClearable
+                isDisabled={!statusOptions.length}
+                options={statusOptions}
+                value={statusOptions.find((option) => option.value === statusFilter) ?? null}
+                onChange={(option) => setStatusFilter(option ? option.value : null)}
+                noOptionsMessage={() => 'Brak wyników'}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1 text-sm">
+              <label htmlFor="reports-validation-filter" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Walidacja
+              </label>
+              <Select<SelectOption>
+                inputId="reports-validation-filter"
+                classNamePrefix="select2"
+                placeholder="Wszystkie walidacje"
+                styles={select2Styles}
+                isClearable
+                isDisabled={!validationOptions.length}
+                options={validationOptions}
+                value={validationOptions.find((option) => option.value === validationFilter) ?? null}
+                onChange={(option) => setValidationFilter(option ? option.value : null)}
+                noOptionsMessage={() => 'Brak wyników'}
+              />
+            </div>
+          </div>
+        </div>
+
         <DataTable
           headers={["Tytuł", "Status", "Okres", "Walidacja", "Akcje"]}
-          rows={reports.map((report) => {
+          rows={displayedReports.map((report) => {
             const validationTone = mapValidationTone(report.validation);
             return [
               <span key={`${report.id}-title`} className="font-medium text-slate-900">
@@ -272,6 +376,13 @@ export default function ReportsPage() {
             ];
           })}
         />
+        {!reportsQuery.isLoading && !displayedReports.length && (
+          <p className="text-sm text-slate-500">
+            {reports.length
+              ? 'Brak sprawozdań spełniających wybrane filtry.'
+              : 'Brak sprawozdań do wyświetlenia.'}
+          </p>
+        )}
       </div>
 
       {activeReport && (

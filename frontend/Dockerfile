@@ -1,8 +1,11 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
+# Force installation of devDependencies needed for the Vite build step
+ENV NODE_ENV=development
+
 COPY package.json package-lock.json ./
-RUN npm ci --include=dev
+RUN npm ci
 
 COPY . .
 RUN npm run build
