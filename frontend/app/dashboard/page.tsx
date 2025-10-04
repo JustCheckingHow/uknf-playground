@@ -134,7 +134,7 @@ export default function DashboardPage() {
           headers={["Temat", "Podmiot", "Ostatnia aktualizacja"]}
           rows={openThreads.map((thread) => [
             thread.subject,
-            thread.entity.name,
+            thread.entity?.name ?? 'Komunikat globalny',
             new Date(thread.updated_at).toLocaleString('pl-PL')
           ])}
         />

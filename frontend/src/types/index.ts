@@ -54,6 +54,25 @@ export interface ReportTimelineEntry {
   created_by?: User | null;
 }
 
+export interface ReportValidationIssue {
+  code: string;
+  message: string;
+  severity: 'error' | 'warning' | string;
+  sheet?: string;
+  cell?: string;
+  expected?: string;
+  actual?: string;
+}
+
+export interface ReportValidationResult {
+  status: string;
+  metadata: Record<string, unknown>;
+  forms: Array<{ id: string; description: string }>;
+  flags: Record<string, unknown>;
+  errors: ReportValidationIssue[];
+  warnings: ReportValidationIssue[];
+}
+
 export interface Report {
   id: number;
   entity: RegulatedEntity;
@@ -65,6 +84,8 @@ export interface Report {
   submitted_at?: string | null;
   validated_at?: string | null;
   validation_errors?: string;
+  validation?: ReportValidationResult | null;
+  file_path?: string | null;
   comments?: string;
   submitted_by?: User | null;
   timeline: ReportTimelineEntry[];
@@ -106,10 +127,11 @@ export interface Message {
 
 export interface MessageThread {
   id: number;
-  entity: RegulatedEntity;
+  entity: RegulatedEntity | null;
   subject: string;
   created_by?: User | null;
   is_internal_only: boolean;
+  is_global: boolean;
   participants: User[];
   created_at: string;
   updated_at: string;

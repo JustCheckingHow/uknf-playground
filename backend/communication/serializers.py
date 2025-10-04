@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from rest_framework import serializers
 
 from accounts.serializers import RegulatedEntitySerializer, UserSerializer
@@ -30,6 +32,7 @@ class ReportSerializer(serializers.ModelSerializer):
     entity_id = serializers.IntegerField(write_only=True)
     submitted_by = UserSerializer(read_only=True)
     timeline = ReportTimelineSerializer(many=True, read_only=True)
+    validation = serializers.SerializerMethodField()
 
     class Meta:
         model = Report
@@ -51,6 +54,7 @@ class ReportSerializer(serializers.ModelSerializer):
             "timeline",
             "created_at",
             "updated_at",
+            "validation",
         ]
         read_only_fields = [
             "status",
@@ -61,6 +65,8 @@ class ReportSerializer(serializers.ModelSerializer):
             "submitted_by",
             "created_at",
             "updated_at",
+            "file_path",
+            "validation",
         ]
 
     def create(self, validated_data):
@@ -75,6 +81,15 @@ class ReportSerializer(serializers.ModelSerializer):
                 notes="Utworzono szkic sprawozdania.",
             )
         return report
+
+    def get_validation(self, obj: Report):
+        payload = obj.validation_errors
+        if not payload:
+            return None
+        try:
+            return json.loads(payload)
+        except (TypeError, ValueError):
+            return {"raw": payload}
 
 
 class ReportStatusSerializer(serializers.Serializer):
@@ -156,12 +171,20 @@ class MessageThreadSerializer(serializers.ModelSerializer):
             "subject",
             "created_by",
             "is_internal_only",
+            "is_global",
             "participants",
             "created_at",
             "updated_at",
             "messages",
         ]
-        read_only_fields = ["created_at", "updated_at", "created_by", "participants", "messages"]
+        read_only_fields = [
+            "created_at",
+            "updated_at",
+            "created_by",
+            "participants",
+            "messages",
+            "is_global",
+        ]
 
     def create(self, validated_data):
         entity_id = validated_data.pop("entity_id")
@@ -197,6 +220,16 @@ class AnnouncementSerializer(serializers.ModelSerializer):
 
 class AnnouncementAcknowledgeSerializer(serializers.Serializer):
     acknowledged = serializers.BooleanField(default=True)
+
+
+class GlobalMessageBroadcastSerializer(serializers.Serializer):
+    subject = serializers.CharField(max_length=255)
+    body = serializers.CharField()
+    attachments = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        allow_empty=True,
+    )
 
 
 class LibraryDocumentSerializer(serializers.ModelSerializer):

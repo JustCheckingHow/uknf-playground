@@ -20,8 +20,7 @@ services:
       context: ./backend
       target: production
     env_file:
-      - backend/.env.example
-      - .env
+     - .env
     environment:
       DATABASE_URL: postgres://uknf:uknf@db:5432/uknf
       DJANGO_CORS_ORIGINS: http://localhost:3000,http://localhost:8123

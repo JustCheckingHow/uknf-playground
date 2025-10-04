@@ -104,10 +104,17 @@ class CaseTimelineEntry(models.Model):
 
 
 class MessageThread(models.Model):
-    entity = models.ForeignKey(RegulatedEntity, on_delete=models.CASCADE, related_name="message_threads")
+    entity = models.ForeignKey(
+        RegulatedEntity,
+        on_delete=models.CASCADE,
+        related_name="message_threads",
+        null=True,
+        blank=True,
+    )
     subject = models.CharField(max_length=255)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="created_threads")
     is_internal_only = models.BooleanField(default=False)
+    is_global = models.BooleanField(default=False)
     participants = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name="message_threads", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

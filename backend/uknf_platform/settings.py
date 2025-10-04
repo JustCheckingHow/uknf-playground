@@ -142,6 +142,21 @@ SECURE_HSTS_SECONDS = int(os.getenv("DJANGO_HSTS_SECONDS", "0"))
 SECURE_HSTS_INCLUDE_SUBDOMAINS = bool(int(os.getenv("DJANGO_HSTS_INCLUDE_SUBDOMAINS", "0")))
 SECURE_HSTS_PRELOAD = bool(int(os.getenv("DJANGO_HSTS_PRELOAD", "0")))
 
+DEFAULT_FROM_EMAIL = os.getenv("DJANGO_DEFAULT_FROM_EMAIL", "noreply@uknf.local")
+EMAIL_BACKEND = os.getenv(
+    "DJANGO_EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend" if DEBUG else "django.core.mail.backends.smtp.EmailBackend",
+)
+
+if EMAIL_BACKEND == "django.core.mail.backends.smtp.EmailBackend":
+    EMAIL_HOST = os.getenv("DJANGO_EMAIL_HOST", "localhost")
+    EMAIL_PORT = int(os.getenv("DJANGO_EMAIL_PORT", "25"))
+    EMAIL_HOST_USER = os.getenv("DJANGO_EMAIL_HOST_USER", "")
+    EMAIL_HOST_PASSWORD = os.getenv("DJANGO_EMAIL_HOST_PASSWORD", "")
+    EMAIL_USE_TLS = os.getenv("DJANGO_EMAIL_USE_TLS", "false").lower() == "true"
+    EMAIL_USE_SSL = os.getenv("DJANGO_EMAIL_USE_SSL", "false").lower() == "true"
+    EMAIL_TIMEOUT = int(os.getenv("DJANGO_EMAIL_TIMEOUT", "10"))
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
