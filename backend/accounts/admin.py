@@ -5,6 +5,11 @@ from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
 from .models import (
     AccessRequest,
+    AccessRequestAttachment,
+    AccessRequestLine,
+    AccessRequestLinePermission,
+    AccessRequestMessage,
+    AccessRequestMessageAttachment,
     ContactSubmission,
     EntityMembership,
     NotificationPreference,
@@ -28,12 +33,14 @@ class UserAdmin(DjangoUserAdmin):
                     "position_title",
                     "preferred_language",
                     "must_change_password",
+                    "managed_entities",
                 )
             },
         ),
     )
     list_display = ("email", "role", "is_staff", "is_active")
     search_fields = ("email", "first_name", "last_name")
+    filter_horizontal = ("managed_entities",)
 
 
 @admin.register(RegulatedEntity)
@@ -50,8 +57,39 @@ class EntityMembershipAdmin(admin.ModelAdmin):
 
 @admin.register(AccessRequest)
 class AccessRequestAdmin(admin.ModelAdmin):
-    list_display = ("entity_name", "requester_email", "status", "submitted_at")
-    list_filter = ("status",)
+    list_display = ("reference_code", "requester", "status", "next_actor", "submitted_at", "decided_at")
+    list_filter = ("status", "next_actor", "handled_by_uknf")
+    search_fields = ("reference_code", "requester__email")
+
+
+@admin.register(AccessRequestLine)
+class AccessRequestLineAdmin(admin.ModelAdmin):
+    list_display = ("request", "entity", "status", "next_actor", "decided_at")
+    list_filter = ("status", "next_actor")
+    search_fields = ("request__reference_code", "entity__name")
+
+
+@admin.register(AccessRequestAttachment)
+class AccessRequestAttachmentAdmin(admin.ModelAdmin):
+    list_display = ("request", "file", "uploaded_by", "created_at")
+    search_fields = ("request__reference_code",)
+
+
+@admin.register(AccessRequestMessage)
+class AccessRequestMessageAdmin(admin.ModelAdmin):
+    list_display = ("request", "sender", "is_internal", "created_at")
+    list_filter = ("is_internal",)
+
+
+@admin.register(AccessRequestMessageAttachment)
+class AccessRequestMessageAttachmentAdmin(admin.ModelAdmin):
+    list_display = ("message", "file", "uploaded_by", "created_at")
+
+
+@admin.register(AccessRequestLinePermission)
+class AccessRequestLinePermissionAdmin(admin.ModelAdmin):
+    list_display = ("line", "code", "status", "decided_at")
+    list_filter = ("code", "status")
 
 
 @admin.register(ContactSubmission)

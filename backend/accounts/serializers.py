@@ -10,6 +10,12 @@ from rest_framework import serializers
 
 from .models import (
     AccessRequest,
+    AccessRequestAttachment,
+    AccessRequestHistoryEntry,
+    AccessRequestLine,
+    AccessRequestLinePermission,
+    AccessRequestMessage,
+    AccessRequestMessageAttachment,
     ContactSubmission,
     EntityMembership,
     NotificationPreference,
@@ -27,7 +33,8 @@ class RoleDisplaySerializer(serializers.Serializer):
 
 class UserSerializer(serializers.ModelSerializer):
     role_display = serializers.CharField(source="get_role_display", read_only=True)
-    pesel_masked = serializers.CharField(source="pesel_masked", read_only=True)
+    pesel_masked = serializers.CharField(read_only=True)
+    managed_entities = serializers.PrimaryKeyRelatedField(many=True, read_only=True)
 
     class Meta:
         model = User
@@ -46,6 +53,7 @@ class UserSerializer(serializers.ModelSerializer):
             "is_active",
             "is_staff",
             "is_internal",
+            "managed_entities",
         ]
         read_only_fields = ["is_staff", "is_internal", "is_active"]
 
@@ -129,6 +137,9 @@ class ActivateAccountSerializer(serializers.Serializer):
         user.is_active = True
         user.must_change_password = False
         user.save(update_fields=["password", "is_active", "must_change_password"])
+        from .services import ensure_initial_access_request
+
+        ensure_initial_access_request(user)
         return user
 
 
@@ -184,32 +195,279 @@ class EntityMembershipSerializer(serializers.ModelSerializer):
         read_only_fields = ["created_at"]
 
 
+class AccessRequestAttachmentSerializer(serializers.ModelSerializer):
+    uploaded_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AccessRequestAttachment
+        fields = ["id", "file", "description", "uploaded_by", "created_at"]
+        read_only_fields = ["id", "uploaded_by", "created_at"]
+
+    def get_uploaded_by(self, obj):
+        if not obj.uploaded_by:
+            return None
+        return {
+            "id": obj.uploaded_by_id,
+            "email": obj.uploaded_by.email,
+            "name": f"{obj.uploaded_by.first_name} {obj.uploaded_by.last_name}".strip(),
+        }
+
+
+class AccessRequestLinePermissionSerializer(serializers.ModelSerializer):
+    code_display = serializers.CharField(source="get_code_display", read_only=True)
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+    decided_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AccessRequestLinePermission
+        fields = [
+            "id",
+            "code",
+            "code_display",
+            "status",
+            "status_display",
+            "decided_by",
+            "decided_at",
+            "notes",
+        ]
+        read_only_fields = [
+            "id",
+            "code_display",
+            "status_display",
+            "decided_by",
+            "decided_at",
+        ]
+
+    def get_decided_by(self, obj):
+        if not obj.decided_by:
+            return None
+        return {
+            "id": obj.decided_by_id,
+            "email": obj.decided_by.email,
+            "name": f"{obj.decided_by.first_name} {obj.decided_by.last_name}".strip(),
+        }
+
+
+class AccessRequestLineSerializer(serializers.ModelSerializer):
+    entity = RegulatedEntitySerializer(read_only=True)
+    entity_id = serializers.PrimaryKeyRelatedField(
+        queryset=RegulatedEntity.objects.all(), write_only=True, source="entity"
+    )
+    permissions = AccessRequestLinePermissionSerializer(many=True, read_only=True)
+    permission_codes = serializers.ListField(
+        child=serializers.ChoiceField(choices=AccessRequestLinePermission.PermissionCode.choices),
+        write_only=True,
+        required=False,
+    )
+
+    class Meta:
+        model = AccessRequestLine
+        fields = [
+            "id",
+            "entity",
+            "entity_id",
+            "status",
+            "next_actor",
+            "contact_email",
+            "decision_notes",
+            "decided_at",
+            "decided_by",
+            "permissions",
+            "permission_codes",
+        ]
+        read_only_fields = [
+            "id",
+            "entity",
+            "status",
+            "next_actor",
+            "decision_notes",
+            "decided_at",
+            "decided_by",
+            "permissions",
+        ]
+
+
+class AccessRequestHistorySerializer(serializers.ModelSerializer):
+    actor = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AccessRequestHistoryEntry
+        fields = ["id", "action", "from_status", "to_status", "payload", "created_at", "actor"]
+        read_only_fields = fields
+
+    def get_actor(self, obj):
+        if not obj.actor:
+            return None
+        return {
+            "id": obj.actor_id,
+            "email": obj.actor.email,
+            "name": f"{obj.actor.first_name} {obj.actor.last_name}".strip(),
+        }
+
+
+class AccessRequestMessageAttachmentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = AccessRequestMessageAttachment
+        fields = ["id", "file", "uploaded_by", "created_at"]
+        read_only_fields = ["id", "uploaded_by", "created_at"]
+
+
+class AccessRequestMessageSerializer(serializers.ModelSerializer):
+    sender = serializers.SerializerMethodField()
+    attachments = AccessRequestMessageAttachmentSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = AccessRequestMessage
+        fields = ["id", "body", "is_internal", "created_at", "sender", "attachments"]
+        read_only_fields = ["id", "is_internal", "created_at", "sender", "attachments"]
+
+    def get_sender(self, obj):
+        if not obj.sender:
+            return None
+        return {
+            "id": obj.sender_id,
+            "email": obj.sender.email,
+            "name": f"{obj.sender.first_name} {obj.sender.last_name}".strip(),
+        }
+
+
+class AccessRequestMessageCreateSerializer(serializers.Serializer):
+    body = serializers.CharField()
+    is_internal = serializers.BooleanField(default=False)
+
+
+class AccessRequestAttachmentUploadSerializer(serializers.Serializer):
+    file = serializers.FileField()
+    description = serializers.CharField(required=False, allow_blank=True)
+
+
 class AccessRequestSerializer(serializers.ModelSerializer):
+    requester = UserSerializer(read_only=True)
+    requester_pesel_masked = serializers.CharField(read_only=True)
+    lines = AccessRequestLineSerializer(many=True, read_only=True)
+    attachments = AccessRequestAttachmentSerializer(many=True, read_only=True)
+    history = AccessRequestHistorySerializer(many=True, read_only=True)
+    messages = AccessRequestMessageSerializer(many=True, read_only=True)
+    decided_by = serializers.SerializerMethodField()
+
     class Meta:
         model = AccessRequest
         fields = [
             "id",
-            "entity_name",
-            "entity_registration_number",
-            "requester_name",
+            "reference_code",
+            "status",
+            "next_actor",
+            "handled_by_uknf",
+            "requester",
+            "requester_first_name",
+            "requester_last_name",
             "requester_email",
             "requester_phone",
-            "requested_role",
+            "requester_pesel_masked",
             "justification",
-            "status",
-            "submitted_at",
-            "reviewed_at",
-            "reviewed_by",
             "decision_notes",
+            "submitted_at",
+            "decided_at",
+            "decided_by",
+            "created_at",
+            "updated_at",
+            "lines",
+            "attachments",
+            "history",
+            "messages",
         ]
-        read_only_fields = ["submitted_at", "reviewed_at", "reviewed_by", "status"]
+        read_only_fields = fields
+
+    def get_decided_by(self, obj):
+        if not obj.decided_by:
+            return None
+        return {
+            "id": obj.decided_by_id,
+            "email": obj.decided_by.email,
+            "name": f"{obj.decided_by.first_name} {obj.decided_by.last_name}".strip(),
+        }
+
+
+class AccessRequestLineInputSerializer(serializers.Serializer):
+    entity_id = serializers.PrimaryKeyRelatedField(queryset=RegulatedEntity.objects.all(), source="entity")
+    contact_email = serializers.EmailField(required=False, allow_blank=True)
+    permission_codes = serializers.ListField(
+        child=serializers.ChoiceField(choices=AccessRequestLinePermission.PermissionCode.choices)
+    )
+
+
+class AccessRequestUpdateSerializer(serializers.ModelSerializer):
+    lines = AccessRequestLineInputSerializer(many=True, required=False)
+
+    class Meta:
+        model = AccessRequest
+        fields = ["justification", "lines"]
+
+    def update(self, instance: AccessRequest, validated_data):
+        lines_data = validated_data.pop("lines", None)
+        if "justification" in validated_data:
+            instance.justification = validated_data["justification"]
+            instance.save(update_fields=["justification", "updated_at"])
+
+        if lines_data is not None:
+            self._sync_lines(instance, lines_data)
+        instance.refresh_next_actor()
+        return instance
+
+    def _sync_lines(self, instance: AccessRequest, lines_data: list[dict]) -> None:
+        existing = {line.entity_id: line for line in instance.lines.all()}
+        seen_entities: set[int] = set()
+        for line_data in lines_data:
+            entity = line_data["entity"]
+            contact_email = line_data.get("contact_email", "")
+            permission_codes = line_data.get("permission_codes", [])
+            line = existing.get(entity.id)
+            if line is None:
+                line = AccessRequestLine.objects.create(request=instance, entity=entity)
+            line.contact_email = contact_email
+            line.status = AccessRequestLine.LineStatus.PENDING
+            line.decision_notes = ""
+            line.decided_by = None
+            line.decided_at = None
+            line.next_actor = AccessRequestLine.NextActor.ENTITY_ADMIN
+            line.save()
+            self._sync_permissions(line, permission_codes)
+            line.save()
+            seen_entities.add(entity.id)
+
+        for entity_id, line in existing.items():
+            if entity_id not in seen_entities:
+                line.permissions.all().delete()
+                line.delete()
+
+    def _sync_permissions(self, line: AccessRequestLine, permission_codes: list[str]) -> None:
+        existing = {perm.code: perm for perm in line.permissions.all()}
+        seen_codes: set[str] = set()
+        for code in permission_codes:
+            permission = existing.get(code)
+            if permission is None:
+                AccessRequestLinePermission.objects.create(line=line, code=code)
+            else:
+                if permission.status != AccessRequestLinePermission.PermissionStatus.REQUESTED:
+                    permission.status = AccessRequestLinePermission.PermissionStatus.REQUESTED
+                    permission.notes = ""
+                    permission.decided_at = None
+                    permission.decided_by = None
+                    permission.save(update_fields=["status", "notes", "decided_at", "decided_by"])
+            seen_codes.add(code)
+
+        for code, permission in existing.items():
+            if code not in seen_codes:
+                permission.delete()
 
 
 class AccessRequestDecisionSerializer(serializers.Serializer):
-    status = serializers.ChoiceField(choices=[
-        AccessRequest.AccessStatus.APPROVED,
-        AccessRequest.AccessStatus.REJECTED,
-    ])
+    status = serializers.ChoiceField(
+        choices=[
+            AccessRequest.AccessStatus.APPROVED,
+            AccessRequest.AccessStatus.BLOCKED,
+        ]
+    )
     decision_notes = serializers.CharField(required=False, allow_blank=True)
 
 

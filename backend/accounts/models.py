@@ -5,6 +5,7 @@ from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.core.validators import RegexValidator
 from django.db import models
 from django.utils import timezone
+from django.utils.crypto import get_random_string
 
 
 class UserManager(BaseUserManager):
@@ -67,6 +68,7 @@ class User(AbstractUser):
     position_title = models.CharField(max_length=128, blank=True)
     preferred_language = models.CharField(max_length=16, default="pl")
     must_change_password = models.BooleanField(default=False)
+    managed_entities = models.ManyToManyField("accounts.RegulatedEntity", related_name="managed_by", blank=True)
 
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]
@@ -145,33 +147,314 @@ class EntityMembership(models.Model):
 
 class AccessRequest(models.Model):
     class AccessStatus(models.TextChoices):
-        SUBMITTED = "submitted", "Złożony"
-        UNDER_REVIEW = "under_review", "W trakcie analizy"
-        APPROVED = "approved", "Zatwierdzony"
-        REJECTED = "rejected", "Odrzucony"
+        DRAFT = "draft", "Roboczy"
+        NEW = "new", "Nowy"
+        APPROVED = "approved", "Zaakceptowany"
+        BLOCKED = "blocked", "Zablokowany"
+        UPDATED = "updated", "Zaktualizowany"
 
-    entity_name = models.CharField(max_length=255)
-    entity_registration_number = models.CharField(max_length=64, blank=True)
-    requester_name = models.CharField(max_length=255)
+    class NextActor(models.TextChoices):
+        REQUESTER = "requester", "Wnioskodawca"
+        ENTITY_ADMIN = "entity_admin", "Administrator podmiotu"
+        UKNF = "uknf", "UKNF"
+        NONE = "none", "Brak"
+
+    reference_code = models.CharField(max_length=24, unique=True, editable=False)
+    requester = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="access_requests")
+    status = models.CharField(max_length=32, choices=AccessStatus.choices, default=AccessStatus.DRAFT)
+    next_actor = models.CharField(max_length=32, choices=NextActor.choices, default=NextActor.REQUESTER)
+    handled_by_uknf = models.BooleanField(default=False)
+
+    requester_first_name = models.CharField(max_length=150)
+    requester_last_name = models.CharField(max_length=150)
     requester_email = models.EmailField()
     requester_phone = models.CharField(max_length=32, blank=True)
-    requested_role = models.CharField(max_length=64)
-    justification = models.TextField()
-    status = models.CharField(max_length=32, choices=AccessStatus.choices, default=AccessStatus.SUBMITTED)
-    submitted_at = models.DateTimeField(auto_now_add=True)
-    reviewed_at = models.DateTimeField(null=True, blank=True)
-    reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="processed_access_requests")
+    requester_pesel = models.CharField(max_length=11, blank=True)
+
+    justification = models.TextField(blank=True)
+
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="decided_access_requests",
+    )
     decision_notes = models.TextField(blank=True)
 
-    def mark_reviewed(self, reviewer: User, status: str, notes: str = "") -> None:
-        self.reviewed_by = reviewer
-        self.status = status
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def save(self, *args, **kwargs):
+        creating = self.pk is None
+        if creating and not self.reference_code:
+            self.reference_code = self._generate_reference()
+        super().save(*args, **kwargs)
+
+    def _generate_reference(self) -> str:
+        return f"AR-{get_random_string(10).upper()}"
+
+    @property
+    def requester_pesel_masked(self) -> str:
+        if not self.requester_pesel:
+            return ""
+        visible = self.requester_pesel[-4:]
+        hidden = "*" * max(len(self.requester_pesel) - 4, 0)
+        return f"{hidden}{visible}"
+
+    def mark_submitted(self, *, actor: User | None = None) -> None:
+        self.status = self.AccessStatus.NEW
+        self.submitted_at = timezone.now()
+        self.next_actor = self._compute_next_actor()
+        self.decision_notes = ""
+        self.decided_by = None
+        self.decided_at = None
+        self.save(update_fields=["status", "submitted_at", "next_actor", "decision_notes", "decided_by", "decided_at", "updated_at"])
+
+    def mark_updated(self, *, actor: User | None = None) -> None:
+        target_status = self.AccessStatus.UPDATED if self.status == self.AccessStatus.APPROVED else self.AccessStatus.NEW
+        self.status = target_status
+        self.next_actor = self._compute_next_actor()
+        self.save(update_fields=["status", "next_actor", "updated_at"])
+
+    def mark_approved(self, *, actor: User, notes: str = "") -> None:
+        self.status = self.AccessStatus.APPROVED
         self.decision_notes = notes
-        self.reviewed_at = timezone.now()
-        self.save(update_fields=["reviewed_by", "status", "decision_notes", "reviewed_at"])
+        self.decided_by = actor
+        self.decided_at = timezone.now()
+        self.next_actor = self.NextActor.NONE
+        self.handled_by_uknf = self.handled_by_uknf or actor.is_internal
+        self.save(
+            update_fields=[
+                "status",
+                "decision_notes",
+                "decided_by",
+                "decided_at",
+                "next_actor",
+                "handled_by_uknf",
+                "updated_at",
+            ]
+        )
+
+    def mark_blocked(self, *, actor: User, notes: str = "") -> None:
+        self.status = self.AccessStatus.BLOCKED
+        self.decision_notes = notes
+        self.decided_by = actor
+        self.decided_at = timezone.now()
+        self.next_actor = self.NextActor.NONE
+        self.handled_by_uknf = self.handled_by_uknf or actor.is_internal
+        self.save(
+            update_fields=[
+                "status",
+                "decision_notes",
+                "decided_by",
+                "decided_at",
+                "next_actor",
+                "handled_by_uknf",
+                "updated_at",
+            ]
+        )
+
+    def _compute_next_actor(self) -> str:
+        if self.status == self.AccessStatus.DRAFT:
+            return self.NextActor.REQUESTER
+        if self.status in {self.AccessStatus.APPROVED, self.AccessStatus.BLOCKED}:
+            return self.NextActor.NONE
+        if self.lines.filter(next_actor=AccessRequestLine.NextActor.UKNF).exists():
+            return self.NextActor.UKNF
+        if self.lines.filter(next_actor=AccessRequestLine.NextActor.ENTITY_ADMIN).exists():
+            return self.NextActor.ENTITY_ADMIN
+        return self.NextActor.NONE
+
+    def refresh_next_actor(self) -> None:
+        next_actor = self._compute_next_actor()
+        if self.next_actor != next_actor:
+            self.next_actor = next_actor
+            self.save(update_fields=["next_actor", "updated_at"])
+
+    def sync_requester_snapshot(self) -> None:
+        self.requester_first_name = self.requester.first_name
+        self.requester_last_name = self.requester.last_name
+        self.requester_email = self.requester.email
+        self.requester_phone = self.requester.phone_number
+        self.requester_pesel = self.requester.pesel
+        self.save(
+            update_fields=[
+                "requester_first_name",
+                "requester_last_name",
+                "requester_email",
+                "requester_phone",
+                "requester_pesel",
+                "updated_at",
+            ]
+        )
 
     def __str__(self) -> str:  # pragma: no cover
-        return f"AccessRequest({self.entity_name}, {self.requester_email})"
+        return f"AccessRequest({self.reference_code})"
+
+
+class AccessRequestHistoryEntry(models.Model):
+    request = models.ForeignKey(AccessRequest, on_delete=models.CASCADE, related_name="history")
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    action = models.CharField(max_length=64)
+    from_status = models.CharField(max_length=32, choices=AccessRequest.AccessStatus.choices, blank=True)
+    to_status = models.CharField(max_length=32, choices=AccessRequest.AccessStatus.choices, blank=True)
+    payload = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+
+class AccessRequestAttachment(models.Model):
+    request = models.ForeignKey(AccessRequest, on_delete=models.CASCADE, related_name="attachments")
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    file = models.FileField(upload_to="access_requests/attachments/%Y/%m/%d")
+    description = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"Attachment({self.file.name})"
+
+
+class AccessRequestLine(models.Model):
+    class LineStatus(models.TextChoices):
+        PENDING = "pending", "Oczekujące"
+        APPROVED = "approved", "Zaakceptowane"
+        BLOCKED = "blocked", "Zablokowane"
+        NEEDS_UPDATE = "needs_update", "Wymaga aktualizacji"
+
+    class NextActor(models.TextChoices):
+        REQUESTER = "requester", "Wnioskodawca"
+        ENTITY_ADMIN = "entity_admin", "Administrator podmiotu"
+        UKNF = "uknf", "UKNF"
+        NONE = "none", "Brak"
+
+    request = models.ForeignKey(AccessRequest, on_delete=models.CASCADE, related_name="lines")
+    entity = models.ForeignKey(RegulatedEntity, on_delete=models.CASCADE, related_name="access_request_lines")
+    status = models.CharField(max_length=32, choices=LineStatus.choices, default=LineStatus.PENDING)
+    next_actor = models.CharField(max_length=32, choices=NextActor.choices, default=NextActor.ENTITY_ADMIN)
+    contact_email = models.EmailField(blank=True)
+    decision_notes = models.TextField(blank=True)
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="decided_access_request_lines",
+    )
+    decided_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ("request", "entity")
+
+    def set_next_actor_from_permissions(self) -> None:
+        if self.status in {self.LineStatus.APPROVED, self.LineStatus.BLOCKED}:
+            self.next_actor = self.NextActor.NONE
+            return
+        if self.permissions.filter(code=AccessRequestLinePermission.PermissionCode.ENTITY_ADMIN).exists():
+            self.next_actor = self.NextActor.UKNF
+            return
+        self.next_actor = self.NextActor.ENTITY_ADMIN
+
+    def save(self, *args, **kwargs):
+        self.set_next_actor_from_permissions()
+        super().save(*args, **kwargs)
+        if self.contact_email:
+            self.entity.contact_email = self.contact_email
+            self.entity.save(update_fields=["contact_email", "updated_at"])
+
+    def mark_approved(self, *, actor: User, notes: str = "") -> None:
+        self.status = self.LineStatus.APPROVED
+        self.decision_notes = notes
+        self.decided_by = actor
+        self.decided_at = timezone.now()
+        self.next_actor = self.NextActor.NONE
+        self.save(update_fields=["status", "decision_notes", "decided_by", "decided_at", "next_actor", "updated_at"])
+
+    def mark_blocked(self, *, actor: User, notes: str = "") -> None:
+        self.status = self.LineStatus.BLOCKED
+        self.decision_notes = notes
+        self.decided_by = actor
+        self.decided_at = timezone.now()
+        self.next_actor = self.NextActor.NONE
+        self.save(update_fields=["status", "decision_notes", "decided_by", "decided_at", "next_actor", "updated_at"])
+
+    def requires_uknf(self) -> bool:
+        return self.permissions.filter(code=AccessRequestLinePermission.PermissionCode.ENTITY_ADMIN).exists()
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"AccessRequestLine({self.request.reference_code} -> {self.entity.name})"
+
+
+class AccessRequestLinePermission(models.Model):
+    class PermissionCode(models.TextChoices):
+        REPORTING = "reporting", "Sprawozdawczość"
+        CASES = "cases", "Sprawy"
+        ENTITY_ADMIN = "entity_admin", "Administrator podmiotu"
+
+    class PermissionStatus(models.TextChoices):
+        REQUESTED = "requested", "Wnioskowane"
+        GRANTED = "granted", "Przyznane"
+        BLOCKED = "blocked", "Zablokowane"
+
+    line = models.ForeignKey(AccessRequestLine, on_delete=models.CASCADE, related_name="permissions")
+    code = models.CharField(max_length=32, choices=PermissionCode.choices)
+    status = models.CharField(max_length=16, choices=PermissionStatus.choices, default=PermissionStatus.REQUESTED)
+    decided_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="decided_access_request_permissions",
+    )
+    decided_at = models.DateTimeField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        unique_together = ("line", "code")
+
+    def mark_granted(self, *, actor: User, notes: str = "") -> None:
+        self.status = self.PermissionStatus.GRANTED
+        self.decided_by = actor
+        self.decided_at = timezone.now()
+        self.notes = notes
+        self.save(update_fields=["status", "decided_by", "decided_at", "notes"])
+
+    def mark_blocked(self, *, actor: User, notes: str = "") -> None:
+        self.status = self.PermissionStatus.BLOCKED
+        self.decided_by = actor
+        self.decided_at = timezone.now()
+        self.notes = notes
+        self.save(update_fields=["status", "decided_by", "decided_at", "notes"])
+
+
+class AccessRequestMessage(models.Model):
+    request = models.ForeignKey(AccessRequest, on_delete=models.CASCADE, related_name="messages")
+    sender = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    body = models.TextField()
+    is_internal = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at"]
+
+
+class AccessRequestMessageAttachment(models.Model):
+    message = models.ForeignKey(AccessRequestMessage, on_delete=models.CASCADE, related_name="attachments")
+    file = models.FileField(upload_to="access_requests/messages/%Y/%m/%d")
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self) -> str:  # pragma: no cover
+        return f"MessageAttachment({self.file.name})"
 
 
 class ContactSubmission(models.Model):

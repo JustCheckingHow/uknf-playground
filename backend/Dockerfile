@@ -21,10 +21,12 @@ COPY . .
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
-EXPOSE 8000
+EXPOSE 80
 
-CMD ["gunicorn", "uknf_platform.wsgi:application", "--bind", "0.0.0.0:8000"]
+FROM base AS production
+ENV DJANGO_DEBUG=false
+CMD ["gunicorn", "uknf_platform.wsgi:application", "--bind", "0.0.0.0:80"]
 
 FROM base AS dev
 ENV DJANGO_DEBUG=true
-CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+CMD ["python", "manage.py", "runserver", "0.0.0.0:80"]

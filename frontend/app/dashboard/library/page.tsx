@@ -42,8 +42,15 @@ function resolveErrorMessage(error: unknown) {
     return null;
   }
   if (axios.isAxiosError(error)) {
+    const status = error.response?.status ?? 0;
     const data = error.response?.data as { detail?: string } | undefined;
-    return data?.detail ?? error.message;
+    if (data?.detail) {
+      return data.detail;
+    }
+    if (status >= 500) {
+      return 'Nie udało się obsłużyć żądania. Spróbuj ponownie później.';
+    }
+    return error.message;
   }
   if (typeof error === 'string') {
     return error;
@@ -61,12 +68,14 @@ export default function LibraryPage() {
   const faq = data?.faq ?? [];
 
   const uploadFormRef = useRef<HTMLFormElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploadForm, setUploadForm] = useState({
     category: DOCUMENT_CATEGORY_OPTIONS[0].value,
     version: '1.0',
     is_mandatory: false
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadValidationError, setUploadValidationError] = useState<string | null>(null);
 
   const [question, setQuestion] = useState('');
   const [qaResult, setQaResult] = useState<LibraryQaResponse | null>(null);
@@ -86,7 +95,11 @@ export default function LibraryPage() {
         is_mandatory: false
       });
       setSelectedFile(null);
+      setUploadValidationError(null);
       uploadFormRef.current?.reset();
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   });
 
@@ -107,8 +120,10 @@ export default function LibraryPage() {
   const handleUploadSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedFile) {
+      setUploadValidationError('Wybierz plik do przesłania.');
       return;
     }
+    setUploadValidationError(null);
 
     const formData = new FormData();
     formData.append('category', uploadForm.category);
@@ -183,25 +198,35 @@ export default function LibraryPage() {
                 </label>
               </div>
               <div className="grid gap-2 text-sm">
-                <label className="flex flex-col gap-2 font-medium text-slate-700">
-                  <span>Plik dokumentu</span>
-                  <input
-                    type="file"
-                    required
-                    onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-                    className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-600 file:mr-3 file:rounded-md file:border file:border-slate-300 file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700 file:hover:bg-slate-50"
-                    accept=".pdf,.doc,.docx,.txt,.md,.rtf"
-                  />
-                </label>
-                {selectedFile && (
-                  <p className="text-xs text-slate-500">Wybrano: {selectedFile.name} (nazwa w bibliotece)</p>
-                )}
+                <span className="font-medium text-slate-700">Plik dokumentu</span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  onChange={(event) => {
+                    setSelectedFile(event.target.files?.[0] ?? null);
+                    setUploadValidationError(null);
+                  }}
+                  className="sr-only"
+                  accept=".pdf,.doc,.docx,.txt,.md,.rtf"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full justify-start gap-2 border-dashed"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <Upload size={16} aria-hidden />
+                  <span className="truncate text-left">
+                    {selectedFile ? selectedFile.name : 'Wybierz plik z dysku'}
+                  </span>
+                </Button>
+                <p className="text-xs text-slate-500">Akceptowane formaty: PDF, DOC, DOCX, TXT, MD, RTF.</p>
               </div>
             </div>
-            {uploadError && (
+            {(uploadValidationError || uploadError) && (
               <p className="flex items-center gap-2 text-sm text-red-600">
                 <AlertCircle size={16} aria-hidden />
-                {uploadError}
+                {uploadValidationError ?? uploadError}
               </p>
             )}
             <div className="flex justify-end">

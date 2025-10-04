@@ -131,6 +131,9 @@ SPECTACULAR_SETTINGS = {
 CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv("DJANGO_CORS_ORIGINS", "http://localhost:3000").split(",") if origin.strip()]
 CORS_ALLOW_CREDENTIALS = True
 
+FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
+ACCOUNT_ACTIVATION_URL = os.getenv("ACCOUNT_ACTIVATION_URL", f"{FRONTEND_BASE_URL}/activate")
+
 SESSION_COOKIE_SECURE = not DEBUG
 CSRF_COOKIE_SECURE = not DEBUG
 SECURE_BROWSER_XSS_FILTER = True
