@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1
-
 FROM node:20-alpine AS builder
 WORKDIR /app
 
@@ -13,15 +11,25 @@ RUN npm install --legacy-peer-deps
 COPY . .
 RUN npm run build
 
-FROM node:20-alpine AS production
-WORKDIR /app
-ENV NODE_ENV=production
-ENV NEXT_TELEMETRY_DISABLED=1
+FROM nginx:alpine AS production
+WORKDIR /usr/share/nginx/html
 
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/package*.json ./
-COPY --from=builder /app/node_modules ./node_modules
+# Remove default nginx static assets
+RUN rm -rf ./*
+
+# Copy the static export from builder
+COPY --from=builder /app/out .
+
+# Create a simple nginx config for SPA
+RUN echo 'server { \
+    listen 3000; \
+    server_name localhost; \
+    root /usr/share/nginx/html; \
+    index index.html; \
+    location / { \
+        try_files $uri $uri/ /index.html; \
+    } \
+}' > /etc/nginx/conf.d/default.conf
 
 EXPOSE 3000
-CMD ["npm", "run", "start"]
+CMD ["nginx", "-g", "daemon off;"]

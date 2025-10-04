@@ -1,5 +1,6 @@
+'use client';
+
 import '@/app/globals.css';
-import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Inter } from 'next/font/google';
@@ -10,11 +11,6 @@ import { AuthProvider } from '@/src/providers/AuthProvider';
 import { QueryProvider } from '@/src/providers/QueryProvider';
 
 const inter = Inter({ subsets: ['latin'] });
-
-export const metadata: Metadata = {
-  title: 'UKNF Platforma Komunikacyjna',
-  description: 'Bezpieczna platforma komunikacyjna UKNF dla podmiotów nadzorowanych.'
-};
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
