@@ -184,6 +184,7 @@ class LibraryDocument(models.Model):
     document_url = models.URLField(blank=True)
     file = models.FileField(upload_to="library/documents/", null=True, blank=True)
     content = models.TextField(blank=True)
+    embedding = models.JSONField(blank=True, default=list)
     uploaded_at = models.DateTimeField(auto_now_add=True)
     is_mandatory = models.BooleanField(default=False)
 

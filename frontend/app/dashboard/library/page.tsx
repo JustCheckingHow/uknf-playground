@@ -62,7 +62,6 @@ export default function LibraryPage() {
 
   const uploadFormRef = useRef<HTMLFormElement | null>(null);
   const [uploadForm, setUploadForm] = useState({
-    description: '',
     category: DOCUMENT_CATEGORY_OPTIONS[0].value,
     version: '1.0',
     is_mandatory: false
@@ -82,7 +81,6 @@ export default function LibraryPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['library-overview'] });
       setUploadForm({
-        description: '',
         category: DOCUMENT_CATEGORY_OPTIONS[0].value,
         version: '1.0',
         is_mandatory: false
@@ -113,7 +111,6 @@ export default function LibraryPage() {
     }
 
     const formData = new FormData();
-    formData.append('description', uploadForm.description);
     formData.append('category', uploadForm.category);
     formData.append('version', uploadForm.version);
     formData.append('file', selectedFile);
@@ -148,66 +145,58 @@ export default function LibraryPage() {
             <h2 className="text-base font-semibold text-slate-800">Dodaj dokument do biblioteki</h2>
           </div>
           <form ref={uploadFormRef} onSubmit={handleUploadSubmit} className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <label className="space-y-1 text-sm">
-                <span className="font-medium text-slate-700">Kategoria</span>
-                <select
-                  required
-                  value={uploadForm.category}
-                  onChange={(event) => setUploadForm((prev) => ({ ...prev, category: event.target.value }))}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none"
-                >
-                  {DOCUMENT_CATEGORY_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="space-y-1 text-sm">
-                <span className="font-medium text-slate-700">Wersja</span>
-                <input
-                  type="text"
-                  value={uploadForm.version}
-                  onChange={(event) => setUploadForm((prev) => ({ ...prev, version: event.target.value }))}
-                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none"
-                  placeholder="np. 1.0"
-                />
-              </label>
-              <label className="flex items-center gap-2 pt-6 text-sm text-slate-700">
-                <input
-                  type="checkbox"
-                  checked={uploadForm.is_mandatory}
-                  onChange={(event) => setUploadForm((prev) => ({ ...prev, is_mandatory: event.target.checked }))}
-                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
-                />
-                <span>Dokument obowiązkowy</span>
-              </label>
-            </div>
-            <label className="space-y-1 text-sm">
-              <span className="font-medium text-slate-700">Opis (opcjonalnie)</span>
-              <textarea
-                value={uploadForm.description}
-                onChange={(event) => setUploadForm((prev) => ({ ...prev, description: event.target.value }))}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none"
-                rows={3}
-                placeholder="Krótki opis zawartości dokumentu"
-              />
-            </label>
-            <div className="space-y-2 text-sm">
-              <label className="font-medium text-slate-700">
-                Plik dokumentu
-                <input
-                  type="file"
-                  required
-                  onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
-                  className="mt-2 block w-full text-xs text-slate-600 file:mr-3 file:rounded-md file:border file:border-slate-300 file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700 file:hover:bg-slate-50"
-                  accept=".pdf,.doc,.docx,.txt,.md,.rtf"
-                />
-              </label>
-              {selectedFile && (
-                <p className="text-xs text-slate-500">Wybrano: {selectedFile.name} (nazwa w bibliotece)</p>
-              )}
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium text-slate-700">Kategoria</span>
+                  <select
+                    required
+                    value={uploadForm.category}
+                    onChange={(event) => setUploadForm((prev) => ({ ...prev, category: event.target.value }))}
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none"
+                  >
+                    {DOCUMENT_CATEGORY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium text-slate-700">Wersja</span>
+                  <input
+                    type="text"
+                    value={uploadForm.version}
+                    onChange={(event) => setUploadForm((prev) => ({ ...prev, version: event.target.value }))}
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none"
+                    placeholder="np. 1.0"
+                  />
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={uploadForm.is_mandatory}
+                    onChange={(event) => setUploadForm((prev) => ({ ...prev, is_mandatory: event.target.checked }))}
+                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                  />
+                  <span>Dokument obowiązkowy</span>
+                </label>
+              </div>
+              <div className="grid gap-2 text-sm">
+                <label className="flex flex-col gap-2 font-medium text-slate-700">
+                  <span>Plik dokumentu</span>
+                  <input
+                    type="file"
+                    required
+                    onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)}
+                    className="block w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-600 file:mr-3 file:rounded-md file:border file:border-slate-300 file:bg-white file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700 file:hover:bg-slate-50"
+                    accept=".pdf,.doc,.docx,.txt,.md,.rtf"
+                  />
+                </label>
+                {selectedFile && (
+                  <p className="text-xs text-slate-500">Wybrano: {selectedFile.name} (nazwa w bibliotece)</p>
+                )}
+              </div>
             </div>
             {uploadError && (
               <p className="flex items-center gap-2 text-sm text-red-600">
@@ -215,9 +204,11 @@ export default function LibraryPage() {
                 {uploadError}
               </p>
             )}
-            <Button type="submit" isLoading={uploadMutation.isPending} className="w-full justify-center">
-              Prześlij dokument
-            </Button>
+            <div className="flex justify-end">
+              <Button type="submit" isLoading={uploadMutation.isPending} className="w-full justify-center md:w-auto">
+                Prześlij dokument
+              </Button>
+            </div>
           </form>
         </Card>
 
@@ -229,25 +220,31 @@ export default function LibraryPage() {
           <p className="text-sm text-slate-600">
             Zadaj pytanie dotyczące dokumentów. Agent przeanalizuje zgromadzone materiały i przygotuje streszczoną odpowiedź wraz ze źródłami.
           </p>
-          <form onSubmit={handleQuestionSubmit} className="space-y-3">
-            <label className="space-y-1 text-sm">
+          <form onSubmit={handleQuestionSubmit} className="flex flex-col gap-3 md:flex-row md:items-end">
+            <label className="flex-1 space-y-1 text-sm">
               <span className="font-medium text-slate-700">Twoje pytanie</span>
-              <textarea
+              <input
                 required
+                type="text"
                 value={question}
                 onChange={(event) => setQuestion(event.target.value)}
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none"
-                rows={4}
+                disabled={qaMutation.isPending}
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-100"
                 placeholder="Wpisz pytanie dotyczące dokumentów z biblioteki"
               />
             </label>
             {qaError && (
-              <p className="flex items-center gap-2 text-sm text-red-600">
+              <p className="flex items-center gap-2 text-sm text-red-600 md:basis-full">
                 <AlertCircle size={16} aria-hidden />
                 {qaError}
               </p>
             )}
-            <Button type="submit" isLoading={qaMutation.isPending} className="w-full justify-center">
+            <Button
+              type="submit"
+              isLoading={qaMutation.isPending}
+              className="w-full justify-center md:w-auto"
+              disabled={!question.trim()}
+            >
               Uzyskaj odpowiedź
             </Button>
           </form>
