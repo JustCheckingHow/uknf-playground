@@ -21,6 +21,7 @@ from .models import (
     NotificationPreference,
     RegulatedEntity,
     User,
+    UserGroup,
     UserSessionContext,
 )
 
@@ -45,6 +46,7 @@ class UserSerializer(serializers.ModelSerializer):
             "last_name",
             "role",
             "role_display",
+            "user_type",
             "pesel_masked",
             "phone_number",
             "department",
@@ -56,6 +58,41 @@ class UserSerializer(serializers.ModelSerializer):
             "managed_entities",
         ]
         read_only_fields = ["is_staff", "is_internal", "is_active"]
+
+
+class UserGroupSerializer(serializers.ModelSerializer):
+    users = UserSerializer(many=True, read_only=True)
+    user_ids = serializers.PrimaryKeyRelatedField(
+        queryset=User.objects.exclude(role=User.UserRole.SYSTEM_ADMIN),
+        many=True,
+        write_only=True,
+        source="users",
+    )
+    created_by = UserSerializer(read_only=True)
+    members_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UserGroup
+        fields = ["id", "name", "created_at", "created_by", "users", "user_ids", "members_count"]
+        read_only_fields = ["id", "created_at", "created_by", "users", "members_count"]
+
+    def get_members_count(self, obj: UserGroup) -> int:
+        return obj.users.count()
+
+    def create(self, validated_data):
+        users = validated_data.pop("users", [])
+        request = self.context.get("request")
+        group = UserGroup.objects.create(created_by=request.user if request else None, **validated_data)
+        if users:
+            group.users.set(users)
+        return group
+
+    def update(self, instance: UserGroup, validated_data):
+        users = validated_data.pop("users", None)
+        instance = super().update(instance, validated_data)
+        if users is not None:
+            instance.users.set(users)
+        return instance
 
 
 class RegisterUserSerializer(serializers.ModelSerializer):

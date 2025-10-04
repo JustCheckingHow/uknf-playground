@@ -22,8 +22,20 @@ class IsEntityMember(BasePermission):
 
 
 class HasRole(BasePermission):
-    def __init__(self, *roles: User.UserRole):
-        self.roles = {role for role in roles}
+    roles: set[User.UserRole] = set()
 
     def has_permission(self, request, view):
-        return bool(request.user and request.user.is_authenticated and request.user.role in self.roles)
+        return bool(
+            request.user
+            and request.user.is_authenticated
+            and request.user.role in self.roles
+        )
+
+    @classmethod
+    def for_roles(cls, *roles: User.UserRole):
+        allowed_roles = set(roles)
+
+        class RolePermission(cls):
+            roles = allowed_roles
+
+        return RolePermission

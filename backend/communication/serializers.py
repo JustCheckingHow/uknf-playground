@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import json
 
+from pathlib import Path
+
+from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
+from accounts.models import UserGroup
 from accounts.serializers import RegulatedEntitySerializer, UserSerializer
 from .models import (
     Announcement,
@@ -17,6 +21,8 @@ from .models import (
     Report,
     ReportTimelineEntry,
 )
+
+User = get_user_model()
 
 
 class ReportTimelineSerializer(serializers.ModelSerializer):
@@ -140,27 +146,68 @@ class CaseSerializer(serializers.ModelSerializer):
         return case
 
 
+class SimpleUserGroupSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserGroup
+        fields = ["id", "name"]
+
+
+class SimpleUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ["id", "email", "first_name", "last_name"]
+
+
 class MessageSerializer(serializers.ModelSerializer):
     sender = UserSerializer(read_only=True)
+    recipient = UserSerializer(read_only=True)
+    attachment = serializers.SerializerMethodField()
 
     class Meta:
         model = Message
-        fields = ["id", "thread", "sender", "body", "attachments", "is_internal_note", "created_at"]
-        read_only_fields = ["thread", "sender", "created_at"]
+        fields = [
+            "id",
+            "thread",
+            "sender",
+            "recipient",
+            "body",
+            "attachment",
+            "is_internal_note",
+            "created_at",
+        ]
+        read_only_fields = ["thread", "sender", "recipient", "attachment", "created_at"]
+
+    def get_attachment(self, obj: Message):
+        if not obj.attachment:
+            return None
+        request = self.context.get("request") if hasattr(self, "context") else None
+        url = obj.attachment.url
+        if request is not None:
+            url = request.build_absolute_uri(url)
+        return {
+            "url": url,
+            "name": Path(obj.attachment.name).name,
+        }
 
 
 class MessageCreateSerializer(serializers.ModelSerializer):
+    attachment = serializers.FileField(required=False, allow_null=True)
+
     class Meta:
         model = Message
-        fields = ["body", "attachments", "is_internal_note"]
+        fields = ["body", "attachment", "is_internal_note"]
 
 
 class MessageThreadSerializer(serializers.ModelSerializer):
     entity = RegulatedEntitySerializer(read_only=True)
-    entity_id = serializers.IntegerField(write_only=True)
+    entity_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
     created_by = UserSerializer(read_only=True)
     participants = UserSerializer(read_only=True, many=True)
     messages = MessageSerializer(many=True, read_only=True)
+    target_group = SimpleUserGroupSerializer(read_only=True)
+    target_group_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    target_user = SimpleUserSerializer(read_only=True)
+    target_user_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
 
     class Meta:
         model = MessageThread
@@ -172,6 +219,10 @@ class MessageThreadSerializer(serializers.ModelSerializer):
             "created_by",
             "is_internal_only",
             "is_global",
+            "target_group",
+            "target_group_id",
+            "target_user",
+            "target_user_id",
             "participants",
             "created_at",
             "updated_at",
@@ -184,11 +235,21 @@ class MessageThreadSerializer(serializers.ModelSerializer):
             "participants",
             "messages",
             "is_global",
+            "target_group",
+            "target_user",
         ]
 
     def create(self, validated_data):
-        entity_id = validated_data.pop("entity_id")
-        thread = MessageThread.objects.create(entity_id=entity_id, created_by=self.context["request"].user, **validated_data)
+        entity_id = validated_data.pop("entity_id", None)
+        target_group_id = validated_data.pop("target_group_id", None)
+        target_user_id = validated_data.pop("target_user_id", None)
+        thread = MessageThread.objects.create(
+            entity_id=entity_id,
+            target_group_id=target_group_id,
+            target_user_id=target_user_id,
+            created_by=self.context["request"].user,
+            **validated_data,
+        )
         if self.context["request"].user:
             thread.participants.add(self.context["request"].user)
         return thread
@@ -225,11 +286,24 @@ class AnnouncementAcknowledgeSerializer(serializers.Serializer):
 class GlobalMessageBroadcastSerializer(serializers.Serializer):
     subject = serializers.CharField(max_length=255)
     body = serializers.CharField()
-    attachments = serializers.ListField(
-        child=serializers.CharField(),
-        required=False,
-        allow_empty=True,
-    )
+    target_type = serializers.ChoiceField(choices=[("group", "group"), ("user", "user")])
+    group = serializers.PrimaryKeyRelatedField(queryset=UserGroup.objects.all(), required=False, allow_null=True)
+    user = serializers.PrimaryKeyRelatedField(queryset=User.objects.all(), required=False, allow_null=True)
+    attachment = serializers.FileField(required=False, allow_null=True)
+
+    def validate(self, attrs):
+        target_type = attrs.get("target_type")
+        if target_type == "group":
+            if not attrs.get("group"):
+                raise serializers.ValidationError({"group": "Wybierz grupę odbiorców."})
+            attrs["user"] = None
+        elif target_type == "user":
+            if not attrs.get("user"):
+                raise serializers.ValidationError({"user": "Wybierz użytkownika."})
+            attrs["group"] = None
+        else:
+            raise serializers.ValidationError({"target_type": "Nieobsługiwany typ odbiorcy."})
+        return attrs
 
 
 class LibraryDocumentSerializer(serializers.ModelSerializer):

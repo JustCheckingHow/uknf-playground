@@ -9,6 +9,8 @@ export type UserRole =
   | 'representative'
   | 'read_only';
 
+export type UserType = 'bank' | 'fundusz_inwestycyjny' | 'inne';
+
 export interface User {
   id: number;
   email: string;
@@ -16,6 +18,7 @@ export interface User {
   last_name: string;
   role: UserRole;
   role_display: string;
+  user_type: UserType;
   pesel_masked?: string;
   phone_number: string;
   department: string;
@@ -116,11 +119,17 @@ export interface CaseItem {
   updated_at: string;
 }
 
+export interface MessageAttachment {
+  url: string;
+  name: string;
+}
+
 export interface Message {
   id: number;
   sender: User | null;
+  recipient: User | null;
   body: string;
-  attachments: string[];
+  attachment?: MessageAttachment | null;
   is_internal_note: boolean;
   created_at: string;
 }
@@ -132,10 +141,24 @@ export interface MessageThread {
   created_by?: User | null;
   is_internal_only: boolean;
   is_global: boolean;
+  target_group?: {
+    id: number;
+    name: string;
+  } | null;
+  target_user?: User | null;
   participants: User[];
   created_at: string;
   updated_at: string;
   messages: Message[];
+}
+
+export interface UserGroup {
+  id: number;
+  name: string;
+  created_at: string;
+  created_by?: User | null;
+  users: User[];
+  members_count: number;
 }
 
 export interface Announcement {

@@ -1,30 +1,59 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 
+import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Badge } from '@/components/ui/Badge';
 import { useAuth } from '@/hooks/useAuth';
 import { apiClient } from '@/lib/api';
-import type { Message, MessageThread } from '@/types';
+import type { Message, MessageThread, User, UserGroup } from '@/types';
+
+interface ThreadFilters {
+  groupId?: number;
+  updatedAfter?: string;
+  updatedBefore?: string;
+  targetType?: TargetType;
+}
 
 interface MessageForm {
   body: string;
+  attachment?: FileList;
 }
+
+type TargetType = 'group' | 'user';
 
 interface BroadcastForm {
   subject: string;
   body: string;
+  groupId?: string;
+  userId?: string;
+  targetType: TargetType;
+  attachment?: FileList;
 }
 
-function useThreads() {
+function useThreads(filters: ThreadFilters) {
   return useQuery({
-    queryKey: ['threads'],
+    queryKey: ['threads', filters],
     queryFn: async () => {
-      const response = await apiClient.get<MessageThread[]>('/communication/messages/');
+      const params: Record<string, string> = {};
+      if (filters.groupId) {
+        params.group = String(filters.groupId);
+      }
+      if (filters.targetType) {
+        params.target_type = filters.targetType;
+      }
+      if (filters.updatedAfter) {
+        params.updated_after = filters.updatedAfter;
+      }
+      if (filters.updatedBefore) {
+        params.updated_before = filters.updatedBefore;
+      }
+      const response = await apiClient.get<MessageThread[]>('/communication/messages/', {
+        params
+      });
       return response.data;
     }
   });
@@ -41,26 +70,83 @@ function useThreadMessages(threadId?: number) {
   });
 }
 
+function useUserGroups(enabled: boolean) {
+  return useQuery({
+    queryKey: ['user-groups', 'messaging'],
+    enabled,
+    queryFn: async () => {
+      const response = await apiClient.get<UserGroup[]>('/auth/user-groups/');
+      return response.data;
+    }
+  });
+}
+
+function useUsers(enabled: boolean) {
+  return useQuery({
+    queryKey: ['users', 'messaging'],
+    enabled,
+    queryFn: async () => {
+      const response = await apiClient.get<User[]>('/auth/users/', {
+        params: { non_admin: true }
+      });
+      return response.data;
+    }
+  });
+}
+
 export default function MessagesPage() {
   const [selectedThreadId, setSelectedThreadId] = useState<number | null>(null);
+  const [groupFilter, setGroupFilter] = useState<string>('all');
+  const [recipientFilter, setRecipientFilter] = useState<TargetType | 'all'>('all');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
   const queryClient = useQueryClient();
   const { profile } = useAuth();
   const isInternalUser = profile?.user.is_internal ?? false;
-  const threadsQuery = useThreads();
+
+  const filters = useMemo<ThreadFilters>(() => {
+    const next: ThreadFilters = {};
+    if (groupFilter !== 'all') {
+      next.groupId = Number(groupFilter);
+    }
+    if (recipientFilter !== 'all') {
+      next.targetType = recipientFilter;
+    }
+    if (dateFrom) {
+      next.updatedAfter = dateFrom;
+    }
+    if (dateTo) {
+      next.updatedBefore = dateTo;
+    }
+    return next;
+  }, [groupFilter, recipientFilter, dateFrom, dateTo]);
+
+  const threadsQuery = useThreads(filters);
   const messagesQuery = useThreadMessages(selectedThreadId ?? undefined);
+  const groupsQuery = useUserGroups(isInternalUser);
+  const usersQuery = useUsers(isInternalUser);
+
   const {
     register: registerMessage,
     handleSubmit: handleMessageSubmit,
     reset: resetMessageForm
-  } = useForm<MessageForm>();
+  } = useForm<MessageForm>({
+    defaultValues: { body: '', attachment: undefined }
+  });
+
   const {
     register: registerBroadcast,
     handleSubmit: handleBroadcastSubmit,
-    reset: resetBroadcastForm
-  } = useForm<BroadcastForm>();
+    reset: resetBroadcastForm,
+    watch: watchBroadcast
+  } = useForm<BroadcastForm>({
+    defaultValues: { subject: '', body: '', targetType: 'group', groupId: '', userId: '', attachment: undefined }
+  });
+
+  const targetType = watchBroadcast('targetType') ?? 'group';
 
   const sendMessageMutation = useMutation({
-    mutationFn: async (payload: MessageForm) => {
+    mutationFn: async (payload: FormData) => {
       if (!selectedThreadId) throw new Error('Brak wybranego wątku');
       await apiClient.post(`/communication/messages/${selectedThreadId}/messages/`, payload);
     },
@@ -68,46 +154,83 @@ export default function MessagesPage() {
       if (selectedThreadId) {
         queryClient.invalidateQueries({ queryKey: ['thread', selectedThreadId] });
       }
-      resetMessageForm();
+      resetMessageForm({ body: '', attachment: undefined as unknown as FileList });
     }
   });
 
   const broadcastMutation = useMutation({
-    mutationFn: async (payload: BroadcastForm) => {
+    mutationFn: async (payload: FormData) => {
       const response = await apiClient.post<MessageThread>('/communication/messages/broadcast/', payload);
       return response.data;
     },
     onSuccess: (thread) => {
       setSelectedThreadId(thread.id);
-      queryClient.setQueryData<MessageThread[]>(['threads'], (current) => {
-        if (!current) {
-          return [thread];
-        }
-        const withoutDuplicate = current.filter((item) => item.id !== thread.id);
-        return [thread, ...withoutDuplicate];
-      });
+      queryClient.invalidateQueries({ queryKey: ['threads'] });
       queryClient.setQueryData<Message[]>(['thread', thread.id], thread.messages);
-      resetBroadcastForm();
+      resetBroadcastForm({
+        subject: '',
+        body: '',
+        targetType: 'group',
+        groupId: '',
+        userId: '',
+        attachment: undefined as unknown as FileList
+      });
     }
   });
 
   const threads = threadsQuery.data ?? [];
   const messages = messagesQuery.data ?? [];
+  const userGroups = groupsQuery.data ?? [];
+  const users = usersQuery.data ?? [];
+  const availableGroups = useMemo(() => {
+    if (isInternalUser) {
+      return userGroups;
+    }
+    const map = new Map<number, { id: number; name: string }>();
+    threads.forEach((thread) => {
+      if (thread.target_group) {
+        map.set(thread.target_group.id, thread.target_group);
+      }
+    });
+    return Array.from(map.values());
+  }, [isInternalUser, threads, userGroups]);
   const selectedThread = threads.find((thread) => thread.id === selectedThreadId) ?? null;
+
+  useEffect(() => {
+    if (selectedThreadId && !threads.some((thread) => thread.id === selectedThreadId)) {
+      setSelectedThreadId(null);
+    }
+  }, [selectedThreadId, threads]);
 
   return (
     <div className="space-y-4">
       {isInternalUser && (
         <Card className="space-y-3">
           <div className="space-y-1">
-            <h2 className="text-lg font-semibold text-slate-900">Wyślij komunikat globalny</h2>
+            <h2 className="text-lg font-semibold text-slate-900">Wyślij wiadomość</h2>
             <p className="text-xs text-slate-500">
-              Komunikat pojawi się w skrzynce wiadomości wszystkich użytkowników i zostanie zapisany w archiwum.
+              Wybierz grupę odbiorców lub konkretnego użytkownika. Odpowiedzi wracają tylko do administracji.
             </p>
           </div>
           <form
-            className="space-y-3"
-            onSubmit={handleBroadcastSubmit((values) => broadcastMutation.mutate(values))}
+            className="grid gap-3 md:grid-cols-2"
+            onSubmit={handleBroadcastSubmit((values) => {
+              const formData = new FormData();
+              formData.append('subject', values.subject);
+              formData.append('body', values.body);
+              formData.append('target_type', values.targetType);
+              if (values.targetType === 'group' && values.groupId) {
+                formData.append('group', values.groupId);
+              }
+              if (values.targetType === 'user' && values.userId) {
+                formData.append('user', values.userId);
+              }
+              const attachment = values.attachment?.item(0);
+              if (attachment) {
+                formData.append('attachment', attachment);
+              }
+              broadcastMutation.mutate(formData);
+            })}
           >
             <label className="block text-sm text-slate-700">
               Temat komunikatu
@@ -118,118 +241,299 @@ export default function MessagesPage() {
                 {...registerBroadcast('subject', { required: true })}
               />
             </label>
-            <label className="block text-sm text-slate-700">
+            <fieldset className="space-y-2 rounded-md border border-slate-200 p-3 text-sm text-slate-700">
+              <legend className="px-1 text-xs font-semibold uppercase text-slate-500">Adresaci</legend>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  value="group"
+                  {...registerBroadcast('targetType')}
+                />
+                Grupa użytkowników
+              </label>
+              <label className="flex items-center gap-2">
+                <input type="radio" value="user" {...registerBroadcast('targetType')} />
+                Pojedynczy użytkownik
+              </label>
+            </fieldset>
+            {targetType === 'group' && (
+              <label className="block text-sm text-slate-700">
+                Grupa docelowa
+                <select
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary"
+                  {...registerBroadcast('groupId', {
+                    validate: (value) => (targetType !== 'group' || value) || 'Wybierz grupę'
+                  })}
+                >
+                  <option value="">Wybierz grupę</option>
+                  {availableGroups.map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {targetType === 'user' && (
+              <label className="block text-sm text-slate-700">
+                Adresat wiadomości
+                <select
+                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary"
+                  {...registerBroadcast('userId', {
+                    validate: (value) => (targetType !== 'user' || value) || 'Wybierz użytkownika'
+                  })}
+                >
+                  <option value="">Wybierz użytkownika</option>
+                  {users.map((user) => (
+                    <option key={user.id} value={user.id}>
+                      {user.email}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            <label className="md:col-span-2 block text-sm text-slate-700">
               Treść komunikatu
               <textarea
                 rows={4}
                 className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary"
-                placeholder="Wpisz treść komunikatu, który ma trafić do wszystkich użytkowników"
+                placeholder="Wpisz treść komunikatu, który ma trafić do wybranej grupy"
                 {...registerBroadcast('body', { required: true })}
               />
             </label>
-            <Button type="submit" isLoading={broadcastMutation.isPending}>
-              Wyślij komunikat globalny
-            </Button>
+            <div className="space-y-2">
+              <label className="block text-sm text-slate-700">
+                Załącznik (opcjonalnie)
+                <input
+                  type="file"
+                  className="mt-1 w-full text-sm"
+                  {...registerBroadcast('attachment')}
+                />
+              </label>
+              <p className="text-xs text-slate-500">
+                Obsługiwane są pojedyncze pliki, które zostaną dołączone do wiadomości.
+              </p>
+            </div>
+            <div className="md:col-span-2 flex items-center gap-3">
+              <Button type="submit" isLoading={broadcastMutation.isPending}>
+                Wyślij wiadomość
+              </Button>
+              {targetType === 'group' && <Badge tone="info">Do grupy</Badge>}
+              {targetType === 'user' && <Badge tone="success">Do użytkownika</Badge>}
+            </div>
           </form>
         </Card>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-[320px_1fr]">
-        <Card className="space-y-3">
+      <Card className="space-y-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">Kanały komunikacji</h2>
-            <p className="text-xs text-slate-500">Zachowaj poufność informacji. Wątki są archiwizowane.</p>
+            <h2 className="text-lg font-semibold text-slate-900">Filtruj wiadomości</h2>
+            <p className="text-xs text-slate-500">Zawęź listę wątków według adresatów i daty aktualizacji.</p>
           </div>
-          <div className="space-y-2">
-            {threads.map((thread) => {
-              const scopeLabel = thread.is_global
-                ? 'Komunikat globalny'
-                : thread.entity?.name ?? 'Brak powiązanego podmiotu';
-              return (
-                <button
-                  key={thread.id}
-                  onClick={() => setSelectedThreadId(thread.id)}
-                  className={`w-full rounded-md border px-3 py-2 text-left text-sm transition ${
-                    selectedThreadId === thread.id
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-primary/50'
-                  }`}
-                >
-                  <p className="font-medium">{thread.subject}</p>
-                  <p className="text-xs text-slate-500">{scopeLabel}</p>
-                </button>
-              );
-            })}
-            {threads.length === 0 && <p className="text-sm text-slate-500">Brak wątków komunikacji.</p>}
-          </div>
-        </Card>
-
-        <Card className="flex min-h-[420px] flex-col">
-          {selectedThread ? (
-            <>
-              <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-                <div>
-                  <h3 className="text-lg font-semibold text-slate-900">{selectedThread.subject}</h3>
-                  {selectedThread.is_global ? (
-                    <p className="text-xs text-slate-500">Komunikat globalny</p>
-                  ) : (
-                    <p className="text-xs text-slate-500">
-                      Podmiot: {selectedThread.entity?.name ?? 'Brak danych'}
-                    </p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
-                  {selectedThread.is_global && <Badge tone="info">Globalny</Badge>}
-                  {selectedThread.is_internal_only ? (
-                    <Badge tone="info">Wewnętrzny</Badge>
-                  ) : (
-                    <Badge tone="success">Zewnętrzny</Badge>
-                  )}
-                </div>
-              </div>
-
-              <div className="mt-4 flex-1 space-y-4 overflow-y-auto pr-2">
-                {messages.map((message) => (
-                  <div key={message.id} className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm">
-                    <div className="flex items-center justify-between text-xs text-slate-500">
-                      <span>{message.sender?.email ?? 'System'}</span>
-                      <span>{new Date(message.created_at).toLocaleString('pl-PL')}</span>
-                    </div>
-                    <p className="mt-2 text-slate-700">{message.body}</p>
-                    {message.is_internal_note && <Badge tone="warning">Notatka wewnętrzna</Badge>}
-                  </div>
-                ))}
-                {messages.length === 0 && (
-                  <p className="text-sm text-slate-500">Brak wiadomości w tym wątku.</p>
-                )}
-              </div>
-
-              <form
-                className="mt-4 space-y-3 border-t border-slate-200 pt-4"
-                onSubmit={handleMessageSubmit((values) => sendMessageMutation.mutate(values))}
+          <div className="grid gap-3 md:grid-cols-4">
+            <label className="block text-xs font-medium text-slate-600">
+              Grupa
+              <select
+                value={groupFilter}
+                onChange={(event) => setGroupFilter(event.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary"
               >
-                <label className="block text-sm text-slate-700">
-                  Treść wiadomości
-                  <textarea
-                    rows={3}
-                    className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary"
-                    placeholder="Napisz odpowiedź..."
-                    {...registerMessage('body', { required: true })}
-                  />
-                </label>
-                <Button type="submit" isLoading={sendMessageMutation.isPending}>
-                  Wyślij wiadomość
-                </Button>
-              </form>
-            </>
-          ) : (
-            <div className="flex flex-1 items-center justify-center text-sm text-slate-500">
-              Wybierz wątek, aby wyświetlić historię komunikacji.
+                <option value="all">Wszystkie grupy</option>
+                {availableGroups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-xs font-medium text-slate-600">
+              Typ odbiorcy
+              <select
+                value={recipientFilter}
+                onChange={(event) => setRecipientFilter(event.target.value as TargetType | 'all')}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary"
+              >
+                <option value="all">Wszyscy</option>
+                <option value="group">Grupy</option>
+                <option value="user">Pojedynczy użytkownicy</option>
+              </select>
+            </label>
+            <label className="block text-xs font-medium text-slate-600">
+              Od daty
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(event) => setDateFrom(event.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary"
+              />
+            </label>
+            <label className="block text-xs font-medium text-slate-600">
+              Do daty
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(event) => setDateTo(event.target.value)}
+                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary"
+              />
+            </label>
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-lg border border-slate-200">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
+              <tr>
+                <th className="px-4 py-3">Temat</th>
+                <th className="px-4 py-3">Adresaci</th>
+                <th className="px-4 py-3">Ostatnia aktualizacja</th>
+                <th className="px-4 py-3">Wiadomości</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {threads.map((thread) => {
+                const scopeLabel = thread.target_group
+                  ? `Grupa: ${thread.target_group.name}`
+                  : thread.target_user
+                  ? `Użytkownik: ${thread.target_user.email}`
+                  : 'Brak danych';
+                const isSelected = selectedThreadId === thread.id;
+                return (
+                  <tr
+                    key={thread.id}
+                    onClick={() => setSelectedThreadId(thread.id)}
+                    className={`cursor-pointer transition ${
+                      isSelected ? 'bg-primary/10 text-primary' : 'hover:bg-primary/5'
+                    }`}
+                  >
+                    <td className="px-4 py-3 text-sm font-medium">{thread.subject}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">{scopeLabel}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">
+                      {new Date(thread.updated_at).toLocaleString('pl-PL')}
+                    </td>
+                    <td className="px-4 py-3 text-sm text-slate-600">{thread.messages.length}</td>
+                  </tr>
+                );
+              })}
+              {threads.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="px-4 py-6 text-center text-sm text-slate-500">
+                    Brak wątków do wyświetlenia przy wybranych filtrach.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card className="space-y-4">
+        {selectedThread ? (
+          <>
+            <div className="flex flex-col gap-2 border-b border-slate-200 pb-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">{selectedThread.subject}</h3>
+                <p className="text-xs text-slate-500">
+                  {selectedThread.target_group
+                    ? `Grupa: ${selectedThread.target_group.name}`
+                    : selectedThread.target_user
+                    ? `Adresat: ${selectedThread.target_user.email}`
+                    : 'Brak danych'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                Ostatnia aktualizacja: {new Date(selectedThread.updated_at).toLocaleString('pl-PL')}
+              </div>
             </div>
-          )}
-        </Card>
-      </div>
+
+            <div className="overflow-hidden rounded-lg border border-slate-200">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">Nadawca</th>
+                    <th className="px-4 py-3">Odbiorca</th>
+                    <th className="px-4 py-3">Data</th>
+                    <th className="px-4 py-3">Treść</th>
+                    <th className="px-4 py-3">Załącznik</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {messages.map((message) => (
+                    <tr key={message.id} className="align-top">
+                      <td className="px-4 py-3 text-xs text-slate-600">{message.sender?.email ?? 'System'}</td>
+                      <td className="px-4 py-3 text-xs text-slate-600">
+                        {message.recipient?.email ?? 'Cała grupa'}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-600">
+                        {new Date(message.created_at).toLocaleString('pl-PL')}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-slate-700">
+                        <span className="block whitespace-pre-wrap">{message.body}</span>
+                        {message.is_internal_note && <Badge tone="warning">Notatka wewnętrzna</Badge>}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-600">
+                        {message.attachment ? (
+                          <a
+                            href={message.attachment.url}
+                            className="text-primary underline"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {message.attachment.name}
+                          </a>
+                        ) : (
+                          '—'
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {messages.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-6 text-center text-sm text-slate-500">
+                        Brak wiadomości w tym wątku.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <form
+              className="space-y-3 border-t border-slate-200 pt-4"
+              onSubmit={handleMessageSubmit((values) => {
+                const formData = new FormData();
+                formData.append('body', values.body);
+                const attachment = values.attachment?.item(0);
+                if (attachment) {
+                  formData.append('attachment', attachment);
+                }
+                sendMessageMutation.mutate(formData);
+              })}
+            >
+              <label className="block text-sm text-slate-700">
+                Treść odpowiedzi
+                <textarea
+                  rows={3}
+                  className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary"
+                  placeholder="Napisz odpowiedź..."
+                  {...registerMessage('body', { required: true })}
+                />
+              </label>
+              <label className="block text-sm text-slate-700">
+                Załącznik (opcjonalnie)
+                <input type="file" className="mt-2 w-full text-sm" {...registerMessage('attachment')} />
+              </label>
+              <Button type="submit" isLoading={sendMessageMutation.isPending}>
+                Wyślij odpowiedź
+              </Button>
+            </form>
+          </>
+        ) : (
+          <div className="flex min-h-[240px] items-center justify-center text-sm text-slate-500">
+            Wybierz wątek, aby wyświetlić szczegóły komunikacji.
+          </div>
+        )}
+      </Card>
     </div>
   );
 }
-

@@ -12,7 +12,7 @@ from django.db import transaction
 from django.db.models import Q
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.parsers import MultiPartParser
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
@@ -28,6 +28,7 @@ from .models import (
     MessageThread,
     Report,
 )
+from .filters import MessageThreadFilter
 from .serializers import (
     AnnouncementAcknowledgeSerializer,
     AnnouncementSerializer,
@@ -240,12 +241,13 @@ class CaseViewSet(viewsets.ModelViewSet):
 
 class MessageThreadViewSet(viewsets.ModelViewSet):
     queryset = (
-        MessageThread.objects.select_related("entity", "created_by")
-        .prefetch_related("participants", "messages", "messages__sender")
+        MessageThread.objects.select_related("entity", "created_by", "target_group")
+        .prefetch_related("participants", "messages", "messages__sender", "messages__recipient")
         .order_by("-updated_at")
     )
     serializer_class = MessageThreadSerializer
     permission_classes = [IsAuthenticated]
+    filterset_class = MessageThreadFilter
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -256,34 +258,64 @@ class MessageThreadViewSet(viewsets.ModelViewSet):
             Q(entity_id__in=entity_ids)
             | Q(participants=self.request.user)
             | Q(is_global=True)
+            | Q(target_group__users=self.request.user)
+            | Q(target_user=self.request.user)
         ).distinct()
 
     def perform_create(self, serializer):
         thread = serializer.save()
         AuditLogEntry.record(actor=self.request.user, action="thread.created", metadata={"thread_id": thread.pk})
 
-    @action(detail=True, methods=["get", "post"], permission_classes=[IsAuthenticated])
+    @action(
+        detail=True,
+        methods=["get", "post"],
+        permission_classes=[IsAuthenticated],
+        parser_classes=[MultiPartParser, FormParser, JSONParser],
+    )
     def messages(self, request, *args, **kwargs):
         thread = self.get_object()
         if request.method == "GET":
-            messages = thread.messages.select_related("sender")
-            return Response(MessageSerializer(messages, many=True).data)
+            messages = thread.messages.select_related("sender", "recipient")
+            if not request.user.is_internal:
+                messages = messages.filter(
+                    Q(recipient__isnull=True)
+                    | Q(recipient=request.user)
+                    | Q(sender=request.user)
+                )
+            serialized = MessageSerializer(messages, many=True, context={"request": request})
+            return Response(serialized.data)
         serializer = MessageCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        attachment = serializer.validated_data.get("attachment")
+        recipient = None
+        if request.user.is_internal:
+            if thread.target_user:
+                recipient = thread.target_user
+        else:
+            recipient = thread.created_by
+            if recipient is None:
+                recipient = thread.participants.filter(is_internal=True).first()
         message = thread.add_message(
             sender=request.user,
             content=serializer.validated_data["body"],
-            attachments=serializer.validated_data.get("attachments"),
             is_internal_note=serializer.validated_data.get("is_internal_note", False),
+            attachment=attachment,
+            recipient=recipient,
         )
         AuditLogEntry.record(
             actor=request.user,
             action="thread.message",
             metadata={"thread_id": thread.pk, "message_id": message.pk},
         )
-        return Response(MessageSerializer(message).data, status=status.HTTP_201_CREATED)
+        serialized = MessageSerializer(message, context={"request": request})
+        return Response(serialized.data, status=status.HTTP_201_CREATED)
 
-    @action(detail=False, methods=["post"], permission_classes=[IsInternalUser])
+    @action(
+        detail=False,
+        methods=["post"],
+        permission_classes=[IsInternalUser],
+        parser_classes=[MultiPartParser, FormParser, JSONParser],
+    )
     def broadcast(self, request, *args, **kwargs):
         serializer = GlobalMessageBroadcastSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -292,14 +324,18 @@ class MessageThreadViewSet(viewsets.ModelViewSet):
             subject=serializer.validated_data["subject"],
             created_by=request.user,
             is_internal_only=False,
-            is_global=True,
+            is_global=serializer.validated_data["target_type"] == "group",
+            target_group=serializer.validated_data.get("group"),
+            target_user=serializer.validated_data.get("user"),
         )
-        if request.user:
-            thread.participants.add(request.user)
+        thread.participants.add(request.user)
+        if thread.target_user:
+            thread.participants.add(thread.target_user)
         message = thread.add_message(
             sender=request.user,
             content=serializer.validated_data["body"],
-            attachments=serializer.validated_data.get("attachments") or [],
+            attachment=serializer.validated_data.get("attachment"),
+            recipient=thread.target_user,
         )
         AuditLogEntry.record(
             actor=request.user,

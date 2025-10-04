@@ -17,6 +17,7 @@ from .views import (
     RoleCatalogView,
     SessionContextView,
     UserDirectoryView,
+    UserGroupViewSet,
 )
 
 router = DefaultRouter()
@@ -25,6 +26,7 @@ router.register(r"memberships", EntityMembershipViewSet, basename="membership")
 router.register(r"access-requests", AccessRequestViewSet, basename="access-request")
 router.register(r"contacts", ContactSubmissionViewSet, basename="contact")
 router.register(r"users", UserDirectoryView, basename="user-directory")
+router.register(r"user-groups", UserGroupViewSet, basename="user-group")
 
 urlpatterns = [
     path("register", RegisterView.as_view(), name="register"),

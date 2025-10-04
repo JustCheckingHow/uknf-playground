@@ -1,6 +1,8 @@
 import { useLocation, Link } from 'react-router-dom';
-import { FileText, MessageSquare, Building2, Megaphone, Library, Shield, ClipboardCheck } from 'lucide-react';
+import { FileText, MessageSquare, Building2, Megaphone, Library, Shield, ClipboardCheck, Users } from 'lucide-react';
 import clsx from 'clsx';
+
+import { useAuth } from '@/hooks/useAuth';
 
 const links = [
   { href: '/dashboard', label: 'Pulpit', icon: Building2 },
@@ -14,12 +16,22 @@ const links = [
 
 export function DashboardSidebar() {
   const location = useLocation();
+  const { user } = useAuth();
+
+  const navigation = [...links];
+  if (user?.role === 'system_admin') {
+    navigation.splice(navigation.length - 1, 0, {
+      href: '/dashboard/groups',
+      label: 'Grupy użytkowników',
+      icon: Users
+    });
+  }
 
   return (
     <aside className="space-y-4">
       <nav className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
         <ul className="space-y-1">
-          {links.map((link) => {
+          {navigation.map((link) => {
             const Icon = link.icon;
             const isActive =
               location.pathname === link.href ||

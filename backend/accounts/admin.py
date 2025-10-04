@@ -15,6 +15,8 @@ from .models import (
     NotificationPreference,
     RegulatedEntity,
     User,
+    UserGroup,
+    UserGroupMembership,
     UserSessionContext,
 )
 
@@ -105,3 +107,15 @@ class UserSessionContextAdmin(admin.ModelAdmin):
 @admin.register(NotificationPreference)
 class NotificationPreferenceAdmin(admin.ModelAdmin):
     list_display = ("user", "notify_via_email", "notify_via_sms")
+
+
+@admin.register(UserGroup)
+class UserGroupAdmin(admin.ModelAdmin):
+    list_display = ("name", "created_by", "created_at")
+    search_fields = ("name", "users__email")
+
+
+@admin.register(UserGroupMembership)
+class UserGroupMembershipAdmin(admin.ModelAdmin):
+    list_display = ("group", "user", "added_at")
+    search_fields = ("group__name", "user__email")

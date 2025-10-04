@@ -70,6 +70,13 @@ class User(AbstractUser):
     must_change_password = models.BooleanField(default=False)
     managed_entities = models.ManyToManyField("accounts.RegulatedEntity", related_name="managed_by", blank=True)
 
+    class UserType(models.TextChoices):
+        BANK = "bank", "Bank"
+        INVESTMENT_FUND = "fundusz_inwestycyjny", "Fundusz inwestycyjny"
+        OTHER = "inne", "Inne"
+
+    user_type = models.CharField(max_length=64, choices=UserType.choices, default=UserType.OTHER)
+
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["username"]
 
@@ -459,6 +466,42 @@ class AccessRequestMessageAttachment(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover
         return f"MessageAttachment({self.file.name})"
+
+
+class UserGroup(models.Model):
+    name = models.CharField(max_length=128, unique=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_groups",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    users = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        through="accounts.UserGroupMembership",
+        related_name="custom_groups",
+    )
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self) -> str:  # pragma: no cover - admin display only
+        return self.name
+
+
+class UserGroupMembership(models.Model):
+    group = models.ForeignKey(UserGroup, on_delete=models.CASCADE, related_name="memberships")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="group_memberships")
+    added_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("group", "user")
+        ordering = ["group", "user"]
+
+    def __str__(self) -> str:  # pragma: no cover - admin display only
+        return f"{self.user.email} -> {self.group.name}"
 
 
 class ContactSubmission(models.Model):

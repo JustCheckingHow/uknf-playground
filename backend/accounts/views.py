@@ -26,9 +26,10 @@ from .models import (
     NotificationPreference,
     RegulatedEntity,
     User,
+    UserGroup,
     UserSessionContext,
 )
-from .permissions import IsEntityMember, IsInternalUser
+from .permissions import HasRole, IsEntityMember, IsInternalUser
 from .serializers import (
     ActivateAccountSerializer,
     AccessRequestAttachmentSerializer,
@@ -45,6 +46,7 @@ from .serializers import (
     RegisterUserSerializer,
     RegulatedEntitySerializer,
     RoleDisplaySerializer,
+    UserGroupSerializer,
     UserSerializer,
     UserSessionContextSerializer,
 )
@@ -536,5 +538,40 @@ class UserDirectoryView(viewsets.ReadOnlyModelViewSet):
     queryset = User.objects.all().order_by("email")
     serializer_class = UserSerializer
     permission_classes = [IsInternalUser]
-    filterset_fields = ["role", "is_active"]
+    filterset_fields = ["role", "is_active", "user_type"]
     search_fields = ["email", "first_name", "last_name"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        non_admin = self.request.query_params.get("non_admin")
+        if non_admin and non_admin.lower() in {"true", "1", "yes"}:
+            qs = qs.exclude(role=User.UserRole.SYSTEM_ADMIN)
+        return qs
+
+
+class UserGroupViewSet(viewsets.ModelViewSet):
+    queryset = UserGroup.objects.prefetch_related("users")
+    serializer_class = UserGroupSerializer
+    permission_classes = [HasRole.for_roles(User.UserRole.SYSTEM_ADMIN)]
+    search_fields = ["name", "users__email", "users__first_name", "users__last_name"]
+
+    def perform_create(self, serializer):
+        group = serializer.save()
+        AuditLogEntry.record(
+            actor=self.request.user,
+            action="user_group.created",
+            metadata={"group_id": group.pk, "member_ids": list(group.users.values_list("id", flat=True))},
+        )
+
+    def perform_update(self, serializer):
+        group = serializer.save()
+        AuditLogEntry.record(
+            actor=self.request.user,
+            action="user_group.updated",
+            metadata={"group_id": group.pk, "member_ids": list(group.users.values_list("id", flat=True))},
+        )
+
+    def perform_destroy(self, instance: UserGroup):
+        metadata = {"group_id": instance.pk, "member_ids": list(instance.users.values_list("id", flat=True))}
+        super().perform_destroy(instance)
+        AuditLogEntry.record(actor=self.request.user, action="user_group.deleted", metadata=metadata)
