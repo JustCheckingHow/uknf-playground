@@ -71,6 +71,30 @@ class LibraryDocumentUploadView(APIView):
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
 
 
+class LibraryDocumentDetailView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, document_id: int, *args, **kwargs):
+        try:
+            document = LibraryDocument.objects.get(pk=document_id)
+        except LibraryDocument.DoesNotExist:
+            return Response({"detail": "Nie znaleziono dokumentu."}, status=status.HTTP_404_NOT_FOUND)
+
+        stored_file = document.file
+        stored_file_name = stored_file.name if stored_file else ""
+        storage = stored_file.storage if stored_file else None
+
+        document.delete()
+
+        if storage and stored_file_name:
+            try:
+                storage.delete(stored_file_name)
+            except Exception as exc:  # pragma: no cover - storage backend safety
+                logger.warning("Nie udało się usunąć pliku dokumentu %s: %s", document_id, exc)
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class LibraryQuestionAnswerView(APIView):
     permission_classes = [AllowAny]
 

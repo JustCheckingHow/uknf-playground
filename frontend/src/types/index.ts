@@ -16,6 +16,7 @@ export interface User {
   last_name: string;
   role: UserRole;
   role_display: string;
+  pesel_masked?: string;
   phone_number: string;
   department: string;
   position_title: string;
@@ -23,6 +24,7 @@ export interface User {
   is_active: boolean;
   is_staff: boolean;
   is_internal: boolean;
+  managed_entities?: number[];
 }
 
 export interface RegulatedEntity {
@@ -168,4 +170,96 @@ export interface ProfileResponse {
     acting_entity: RegulatedEntity | null;
     updated_at: string;
   };
+}
+
+export type AccessRequestStatus = 'draft' | 'new' | 'approved' | 'blocked' | 'updated';
+
+export type AccessRequestNextActor = 'requester' | 'entity_admin' | 'uknf' | 'none';
+
+export interface AccessRequestActor {
+  id: number;
+  email: string;
+  name: string;
+}
+
+export interface AccessRequestAttachment {
+  id: number;
+  file: string;
+  description: string;
+  uploaded_by: AccessRequestActor | null;
+  created_at: string;
+}
+
+export interface AccessRequestLinePermission {
+  id: number;
+  code: 'reporting' | 'cases' | 'entity_admin';
+  code_display: string;
+  status: 'requested' | 'granted' | 'blocked';
+  status_display: string;
+  decided_by: AccessRequestActor | null;
+  decided_at: string | null;
+  notes: string;
+}
+
+export interface AccessRequestLine {
+  id: number;
+  entity: RegulatedEntity;
+  status: 'pending' | 'approved' | 'blocked' | 'needs_update';
+  next_actor: AccessRequestNextActor;
+  contact_email: string;
+  decision_notes: string;
+  decided_at: string | null;
+  decided_by: AccessRequestActor | null;
+  permissions: AccessRequestLinePermission[];
+}
+
+export interface AccessRequestHistoryEntry {
+  id: number;
+  action: string;
+  from_status: AccessRequestStatus | '';
+  to_status: AccessRequestStatus | '';
+  payload: Record<string, unknown>;
+  created_at: string;
+  actor: AccessRequestActor | null;
+}
+
+export interface AccessRequestMessageAttachment {
+  id: number;
+  file: string;
+  uploaded_by: AccessRequestActor | null;
+  created_at: string;
+}
+
+export interface AccessRequestMessage {
+  id: number;
+  body: string;
+  is_internal: boolean;
+  created_at: string;
+  sender: AccessRequestActor | null;
+  attachments: AccessRequestMessageAttachment[];
+}
+
+export interface AccessRequest {
+  id: number;
+  reference_code: string;
+  status: AccessRequestStatus;
+  next_actor: AccessRequestNextActor;
+  handled_by_uknf: boolean;
+  requester: User;
+  requester_first_name: string;
+  requester_last_name: string;
+  requester_email: string;
+  requester_phone: string;
+  requester_pesel_masked: string;
+  justification: string;
+  decision_notes: string;
+  submitted_at: string | null;
+  decided_at: string | null;
+  decided_by: AccessRequestActor | null;
+  created_at: string;
+  updated_at: string;
+  lines: AccessRequestLine[];
+  attachments: AccessRequestAttachment[];
+  history: AccessRequestHistoryEntry[];
+  messages: AccessRequestMessage[];
 }

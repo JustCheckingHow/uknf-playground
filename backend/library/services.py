@@ -116,7 +116,11 @@ def _fallback_documents(question: str) -> list[LibraryDocument]:
         queryset = queryset.filter(query)
     documents = list(queryset.order_by("-published_at")[:MAX_DOCUMENTS])
     if not documents:
-        documents = list(LibraryDocument.objects.order_by("-published_at")[:SIMILARITY_FALLBACK_LIMIT])
+        documents = list(
+            LibraryDocument.objects.order_by("-published_at")[
+                :SIMILARITY_FALLBACK_LIMIT
+            ]
+        )
     return documents
 
 
@@ -222,8 +226,12 @@ def generate_library_answer(question: str) -> tuple[str, list[LibraryDocument]]:
         f"Dokumenty:\n{context_text}\n"
     )
     result = agent.run_sync(prompt)
-    answer = getattr(result, "output_text", str(result))
+    answer = getattr(result, "output", str(result))
     return answer.strip(), documents
 
 
-__all__ = ["compute_text_embedding", "extract_text_from_file", "generate_library_answer"]
+__all__ = [
+    "compute_text_embedding",
+    "extract_text_from_file",
+    "generate_library_answer",
+]

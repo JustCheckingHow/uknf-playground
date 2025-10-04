@@ -254,6 +254,20 @@ class AccessRequestViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):  # pragma: no cover - safety net
         raise MethodNotAllowed("POST")
 
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        instance = self.get_object()
+        serializer = AccessRequestUpdateSerializer(instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        self.perform_update(serializer)
+        instance.refresh_from_db()
+        full_serializer = AccessRequestSerializer(instance, context=self.get_serializer_context())
+        return Response(full_serializer.data)
+
+    def partial_update(self, request, *args, **kwargs):  # pragma: no cover - delegates to update
+        kwargs["partial"] = True
+        return self.update(request, *args, **kwargs)
+
     def perform_update(self, serializer):
         actor: User = self.request.user
         instance: AccessRequest = self.get_object()

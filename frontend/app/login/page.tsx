@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -75,7 +76,14 @@ export default function LoginPage() {
         <div className="rounded-md bg-slate-50 p-4 text-xs text-slate-600">
           <p className="font-semibold text-slate-700">Pierwszy raz w systemie?</p>
           <p className="mt-1 leading-relaxed">
-            Poproś administratora podmiotu o dodanie Cię do platformy lub wyślij wniosek o dostęp poprzez formularz kontaktowy w module administracyjnym.
+            <Link href="/register" className="font-semibold text-primary hover:underline">
+              Złóż wniosek o utworzenie konta
+            </Link>{' '}
+            i odbierz link aktywacyjny na e-mail. Jeżeli masz już link, przejdź do{' '}
+            <Link href="/activate" className="font-semibold text-primary hover:underline">
+              aktywacji konta
+            </Link>
+            .
           </p>
         </div>
       </Card>

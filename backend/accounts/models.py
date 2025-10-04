@@ -217,8 +217,12 @@ class AccessRequest(models.Model):
         self.save(update_fields=["status", "submitted_at", "next_actor", "decision_notes", "decided_by", "decided_at", "updated_at"])
 
     def mark_updated(self, *, actor: User | None = None) -> None:
-        target_status = self.AccessStatus.UPDATED if self.status == self.AccessStatus.APPROVED else self.AccessStatus.NEW
-        self.status = target_status
+        if self.status in {self.AccessStatus.DRAFT, self.AccessStatus.NEW}:
+            self.next_actor = self._compute_next_actor()
+            self.save(update_fields=["next_actor", "updated_at"])
+            return
+
+        self.status = self.AccessStatus.UPDATED
         self.next_actor = self._compute_next_actor()
         self.save(update_fields=["status", "next_actor", "updated_at"])
 

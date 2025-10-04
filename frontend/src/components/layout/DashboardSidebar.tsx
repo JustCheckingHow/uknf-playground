@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { FileText, MessageSquare, Building2, Megaphone, Library, Shield } from 'lucide-react';
+import { FileText, MessageSquare, Building2, Megaphone, Library, Shield, ClipboardCheck } from 'lucide-react';
 import clsx from 'clsx';
 
 const links = [
@@ -11,6 +11,7 @@ const links = [
   { href: '/dashboard/messages', label: 'Wiadomości', icon: MessageSquare },
   { href: '/dashboard/announcements', label: 'Komunikaty', icon: Megaphone },
   { href: '/dashboard/library', label: 'Biblioteka', icon: Library },
+  { href: '/dashboard/access-requests', label: 'Wnioski', icon: ClipboardCheck },
   { href: '/dashboard/settings', label: 'Administracja', icon: Shield }
 ];
 
