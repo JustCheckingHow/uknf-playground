@@ -57,6 +57,12 @@ class User(AbstractUser):
 
     role = models.CharField(max_length=64, choices=UserRole.choices, default=UserRole.ENTITY_ADMIN)
     phone_number = models.CharField(max_length=32, blank=True, validators=[RegexValidator(r"^[0-9+ ]*$", "Niepoprawny numer telefonu")])
+    pesel = models.CharField(
+        max_length=11,
+        blank=True,
+        validators=[RegexValidator(r"^\d{11}$", "Niepoprawny numer PESEL")],
+        help_text="Numer PESEL użytkownika przechowywany na potrzeby weryfikacji.",
+    )
     department = models.CharField(max_length=128, blank=True)
     position_title = models.CharField(max_length=128, blank=True)
     preferred_language = models.CharField(max_length=16, default="pl")
@@ -79,6 +85,14 @@ class User(AbstractUser):
 
     def __str__(self) -> str:  # pragma: no cover - human-readable
         return f"{self.email} ({self.get_role_display()})"
+
+    @property
+    def pesel_masked(self) -> str:
+        if not self.pesel:
+            return ""
+        visible = self.pesel[-4:]
+        hidden = "*" * max(len(self.pesel) - 4, 0)
+        return f"{hidden}{visible}"
 
 
 class RegulatedEntity(models.Model):

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+from django.db.models import Q
 from rest_framework import status
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -40,7 +41,12 @@ class LibrarySearchView(APIView):
         query = request.query_params.get("q", "").lower()
         documents_qs = LibraryDocument.objects.all()
         if query:
-            documents_qs = documents_qs.filter(title__icontains=query)
+            documents_qs = documents_qs.filter(
+                Q(title__icontains=query)
+                | Q(description__icontains=query)
+                | Q(document_url__icontains=query)
+                | Q(file__icontains=query)
+            )
         return Response(
             {
                 "results": LibraryDocumentSerializer(

@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from django.contrib.auth import authenticate
+from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.tokens import default_token_generator
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
-from rest_framework.authtoken.models import Token
 
 from .models import (
     AccessRequest,
@@ -24,6 +27,7 @@ class RoleDisplaySerializer(serializers.Serializer):
 
 class UserSerializer(serializers.ModelSerializer):
     role_display = serializers.CharField(source="get_role_display", read_only=True)
+    pesel_masked = serializers.CharField(source="pesel_masked", read_only=True)
 
     class Meta:
         model = User
@@ -34,6 +38,7 @@ class UserSerializer(serializers.ModelSerializer):
             "last_name",
             "role",
             "role_display",
+            "pesel_masked",
             "phone_number",
             "department",
             "position_title",
@@ -46,20 +51,84 @@ class UserSerializer(serializers.ModelSerializer):
 
 
 class RegisterUserSerializer(serializers.ModelSerializer):
+    pesel = serializers.CharField(write_only=True, max_length=11)
+
+    ALLOWED_ROLES = {
+        User.UserRole.ENTITY_ADMIN,
+        User.UserRole.SUBMITTER,
+    }
+
     class Meta:
         model = User
-        fields = ["email", "password", "first_name", "last_name", "role", "phone_number"]
+        fields = ["email", "first_name", "last_name", "pesel", "phone_number", "role"]
         extra_kwargs = {
-            "password": {"write_only": True, "min_length": 12},
             "role": {"default": User.UserRole.ENTITY_ADMIN},
         }
 
     def create(self, validated_data):
-        password = validated_data.pop("password")
-        user = User.objects.create_user(**validated_data)
+        request = self.context.get("request")
+        from .services import send_activation_email
+
+        user = User.objects.create_user(
+            password=None,
+            must_change_password=True,
+            is_active=False,
+            **validated_data,
+        )
+        send_activation_email(user, request=request)
+        return user
+
+    def validate_pesel(self, value: str) -> str:
+        digits = value.strip()
+        if not digits.isdigit() or len(digits) != 11:
+            raise serializers.ValidationError("PESEL musi składać się z 11 cyfr.")
+        return digits
+
+    def validate_role(self, value: str) -> str:
+        if value not in self.ALLOWED_ROLES:
+            allowed = ", ".join(sorted(role for role in self.ALLOWED_ROLES))
+            raise serializers.ValidationError(f"Rejestracja dostępna jest tylko dla ról: {allowed}.")
+        return value
+
+
+class ActivateAccountSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()
+    password = serializers.CharField(write_only=True)
+    password_confirm = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        uid = attrs.get("uid")
+        try:
+            user_id = force_str(urlsafe_base64_decode(uid))
+            user = User.objects.get(pk=user_id)
+        except (ValueError, User.DoesNotExist):
+            raise serializers.ValidationError({"uid": "Nieprawidłowy identyfikator użytkownika."})
+
+        token = attrs.get("token")
+        if not default_token_generator.check_token(user, token):
+            raise serializers.ValidationError({"token": "Nieprawidłowy lub wygasły token aktywacyjny."})
+
+        if user.is_active:
+            raise serializers.ValidationError({"uid": "Konto zostało już aktywowane."})
+
+        password = attrs.get("password")
+        password_confirm = attrs.get("password_confirm")
+        if password != password_confirm:
+            raise serializers.ValidationError({"password_confirm": "Hasła muszą być identyczne."})
+
+        validate_password(password, user)
+
+        attrs["user"] = user
+        return attrs
+
+    def save(self, **kwargs):
+        user: User = self.validated_data["user"]
+        password = self.validated_data["password"]
         user.set_password(password)
-        user.save(update_fields=["password"])
-        Token.objects.get_or_create(user=user)
+        user.is_active = True
+        user.must_change_password = False
+        user.save(update_fields=["password", "is_active", "must_change_password"])
         return user
 
 

@@ -17,7 +17,20 @@ from .models import (
 @admin.register(User)
 class UserAdmin(DjangoUserAdmin):
     fieldsets = DjangoUserAdmin.fieldsets + (
-        ("Informacje dodatkowe", {"fields": ("role", "phone_number", "department", "position_title", "preferred_language", "must_change_password")}),
+        (
+            "Informacje dodatkowe",
+            {
+                "fields": (
+                    "role",
+                    "phone_number",
+                    "pesel",
+                    "department",
+                    "position_title",
+                    "preferred_language",
+                    "must_change_password",
+                )
+            },
+        ),
     )
     list_display = ("email", "role", "is_staff", "is_active")
     search_fields = ("email", "first_name", "last_name")
