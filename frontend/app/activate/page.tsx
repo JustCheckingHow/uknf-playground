@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -34,7 +34,7 @@ const schema = z
 
 type FormValues = z.infer<typeof schema>;
 
-export default function ActivatePage() {
+function ActivateForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const {
@@ -166,5 +166,13 @@ export default function ActivatePage() {
         </div>
       </Card>
     </div>
+  );
+}
+
+export default function ActivatePage() {
+  return (
+    <Suspense fallback={<div className="py-10 text-center text-sm text-slate-500">Wczytywanie danych aktywacyjnych…</div>}>
+      <ActivateForm />
+    </Suspense>
   );
 }

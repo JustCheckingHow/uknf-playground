@@ -1,0 +1,23 @@
+# Prevent copying installed dependencies; Docker will install its own
+node_modules
+
+# Build artifacts and caches
+.next
+out
+dist
+coverage
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# Local environment files
+.env
+.env.*
+
+# Git metadata
+.git
+.gitignore
+
+# Editor directories
+.vscode
+.idea
