@@ -65,18 +65,22 @@ class ValidationResult:
 
 
 class WorkbookReader:
-    """Lightweight XLSX reader tailored for UKNF sprawozdania templates."""
+    """Lightweight Excel reader tailored for UKNF sprawozdania templates."""
+
     def __init__(self, file_path: str | Path):
         self.file_path = Path(file_path)
         if not self.file_path.exists():
             raise FileNotFoundError(f"Brak pliku sprawozdania: {self.file_path}")
-        with zipfile.ZipFile(self.file_path) as archive:
-            self.shared_strings = self._load_shared_strings(archive)
-            self.sheet_targets = self._load_sheet_targets(archive)
-            self.sheets = {
-                name: self._parse_sheet(archive.read(f"xl/{target}"))
-                for name, target in self.sheet_targets.items()
-            }
+        try:
+            with zipfile.ZipFile(self.file_path) as archive:
+                self.shared_strings = self._load_shared_strings(archive)
+                self.sheet_targets = self._load_sheet_targets(archive)
+                self.sheets = {
+                    name: self._parse_sheet(archive.read(f"xl/{target}"))
+                    for name, target in self.sheet_targets.items()
+                }
+        except zipfile.BadZipFile:
+            self._load_xls_workbook()
 
     def get(self, sheet: str, cell: str) -> Any:
         return self.sheets.get(sheet, {}).get(cell)
@@ -202,9 +206,68 @@ class WorkbookReader:
                 cells[reference] = raw_value
         return cells
 
+    def _load_xls_workbook(self) -> None:
+        try:
+            import xlrd
+        except ImportError as exc:  # pragma: no cover - defensive fallback
+            raise ValueError("Plik XLS nie jest obsługiwany w tym środowisku.") from exc
+
+        workbook = xlrd.open_workbook(self.file_path.as_posix())
+        try:
+            sheet_names = workbook.sheet_names()
+            self.shared_strings = []
+            self.sheet_targets = {name: name for name in sheet_names}
+            self.sheets = {
+                name: self._parse_xls_sheet(workbook.sheet_by_name(name))
+                for name in sheet_names
+            }
+        finally:
+            workbook.release_resources()
+
+    def _parse_xls_sheet(self, sheet: Any) -> dict[str, Any]:
+        import xlrd
+
+        cells: dict[str, Any] = {}
+        for row_index in range(sheet.nrows):
+            for column_index in range(sheet.ncols):
+                cell = sheet.cell(row_index, column_index)
+                value = self._convert_xls_cell(cell)
+                if value is None or value == "":
+                    continue
+                reference = f"{_column_label(column_index)}{row_index + 1}"
+                cells[reference] = value
+        return cells
+
+    def _convert_xls_cell(self, cell: Any) -> Any:
+        import xlrd
+
+        if cell.ctype in (xlrd.XL_CELL_EMPTY, xlrd.XL_CELL_BLANK):
+            return None
+        if cell.ctype == xlrd.XL_CELL_TEXT:
+            return cell.value
+        if cell.ctype == xlrd.XL_CELL_BOOLEAN:
+            return bool(cell.value)
+        if cell.ctype in (xlrd.XL_CELL_NUMBER, xlrd.XL_CELL_DATE):
+            try:
+                return Decimal(str(cell.value))
+            except InvalidOperation:
+                return cell.value
+        if cell.ctype == xlrd.XL_CELL_ERROR:
+            return None
+        return cell.value
+
     @staticmethod
     def _parse_xml(payload: bytes):
         return ET.fromstring(payload)
+
+
+def _column_label(index: int) -> str:
+    label = ""
+    while index >= 0:
+        index, remainder = divmod(index, 26)
+        label = chr(65 + remainder) + label
+        index -= 1
+    return label
 
 
 def _decimal_to_str(value: Decimal | None) -> str | None:

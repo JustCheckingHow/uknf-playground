@@ -42,19 +42,48 @@ python manage.py loaddata fixtures/seed_data.json  # optional demo data
 python manage.py runserver
 ```
 
-Key endpoints (default base: `http://localhost:8000/api`):
+API base URL (dev server): `http://localhost:8000/api`
 
-- `POST /auth/register` – Register external users
-- `POST /auth/login` & `POST /auth/logout` – Obtain/clear auth tokens
-- `GET /auth/profile` – User profile, memberships and acting entity
-- `POST /auth/session` – Switch acting entity
-- `GET/POST /auth/access-requests` – Manage onboarding flows
-- `GET/POST /communication/reports` – Report lifecycle (submit/status)
-- `GET/POST /communication/messages` – Secure messaging threads
-- `GET/POST /communication/announcements` – Regulatory notices
-- `GET /communication/library` & `GET /library/overview` – Document hub
-- `GET/PUT /admin/password-policy` – Password hardening policies
-- `GET /admin/audit-logs` – Immutable audit trail
+API base URL (docker compose): `http://localhost:8123/api`
+
+**Platform**
+- `GET /health` – service heartbeat check.
+- `GET /schema` & `GET /docs` – OpenAPI schema and Swagger UI backed by drf-spectacular.
+
+**Authentication & Directory**
+- `POST /auth/register` / `POST /auth/activate` – external onboarding and activation.
+- `POST /auth/login` / `POST /auth/logout` – obtain or revoke a DRF token (`Authorization: Token <key>`).
+- `GET /auth/profile` – authenticated user details, memberships and active session context.
+- `POST /auth/session` – change the acting entity for multi-entity users.
+- `GET/PUT /auth/preferences` – notification channel configuration.
+- `GET /auth/roles` – role catalogue metadata used by the UI.
+- `GET/POST /auth/entities` – regulated entity directory (mutations restricted to internal staff; `POST /auth/entities/{id}/verify` logs verifications).
+- `GET/POST /auth/memberships` – entity membership management (entity admins can add/remove their members).
+- `GET /auth/access-requests` – onboarding workflow, including `GET /auth/access-requests/my-active`, `POST /auth/access-requests/{id}/submit`, `POST /auth/access-requests/{id}/return`, `POST /auth/access-requests/{id}/lines/{line_id}/approve` and `POST /auth/access-requests/{id}/lines/{line_id}/block`.
+- `GET/POST /auth/access-requests/{id}/messages` and `POST /auth/access-requests/{id}/attachments` – threaded discussions and supporting documents for access requests.
+- `POST /auth/contacts` – public contact form; `GET /auth/contacts` exposes submissions to internal reviewers.
+- `GET /auth/users` – internal user directory search (read-only).
+- `GET/POST /auth/user-groups` – internal user groups for broadcast targeting (system admins only).
+
+**Communication**
+- `GET/POST /communication/reports` – report submissions and review (internal reviewers can invoke `POST /communication/reports/{id}/status`).
+- `GET/POST /communication/cases` – supervisory case management (create/update/delete limited to UKNF staff).
+- `GET/POST /communication/messages` – secure threads with `GET/POST /communication/messages/{id}/messages` for the conversation log and `POST /communication/messages/broadcast` for internal broadcasts.
+- `GET/POST /communication/announcements` – regulatory announcements with `POST /communication/announcements/{id}/acknowledge` for receipt tracking.
+- `GET /communication/library` – published regulatory resources.
+- `GET /communication/faq` – active FAQ entries.
+
+**Library**
+- `GET /library/overview` – featured documents and FAQ highlights for the dashboard.
+- `GET /library/search?q=` – full-text search over library documents.
+- `POST /library/documents` / `DELETE /library/documents/{id}` – authenticated upload and removal of library artefacts.
+- `POST /library/qa` – question-answering endpoint returning generated answers plus cited sources.
+
+**Administration (internal)**
+- `GET/PUT /admin/password-policy` – password policy configuration (system scope).
+- `GET /admin/audit-logs` – searchable audit trail (internal-only).
+- `GET/POST /admin/retention` – CRUD for data-retention policies keyed by `data_type`.
+- `GET/POST /admin/maintenance` – maintenance window scheduling with audit logging.
 
 ### Frontend (React)
 

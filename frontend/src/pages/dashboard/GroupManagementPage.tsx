@@ -12,12 +12,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { apiClient } from '@/lib/api';
 import type { User, UserGroup, UserType } from '@/types';
 import { select2Styles, type SelectOption } from '@/components/ui/select2Styles';
-
-const USER_TYPE_LABELS: Record<UserType, string> = {
-  bank: 'Bank',
-  fundusz_inwestycyjny: 'Fundusz inwestycyjny',
-  inne: 'Inne'
-};
+import { USER_TYPE_LABELS, USER_TYPE_SELECT_OPTIONS } from '@/lib/userTypes';
 
 type GroupPayload = {
   name: string;
@@ -36,12 +31,7 @@ export default function GroupManagementPage() {
   const [groupName, setGroupName] = useState('');
 
   const userTypeOptions = useMemo<SelectOption[]>(
-    () => [
-      { value: 'all', label: 'Wszyscy' },
-      { value: 'bank', label: 'Bank' },
-      { value: 'fundusz_inwestycyjny', label: 'Fundusz inwestycyjny' },
-      { value: 'inne', label: 'Inne' }
-    ],
+    () => [{ value: 'all', label: 'Wszyscy' }, ...USER_TYPE_SELECT_OPTIONS],
     []
   );
 
