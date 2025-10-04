@@ -1,8 +1,18 @@
 from __future__ import annotations
 
+import json
+import logging
+import shutil
+from pathlib import Path
+from tempfile import NamedTemporaryFile
+from uuid import uuid4
+
+from django.core.files.storage import default_storage
+from django.db import transaction
 from django.db.models import Q
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
@@ -23,6 +33,7 @@ from .serializers import (
     AnnouncementSerializer,
     CaseSerializer,
     FaqEntrySerializer,
+    GlobalMessageBroadcastSerializer,
     LibraryDocumentSerializer,
     MessageCreateSerializer,
     MessageSerializer,
@@ -30,6 +41,10 @@ from .serializers import (
     ReportSerializer,
     ReportStatusSerializer,
 )
+from .services import validate_report_workbook
+
+
+logger = logging.getLogger(__name__)
 
 
 class ReportViewSet(viewsets.ModelViewSet):
@@ -77,6 +92,131 @@ class ReportViewSet(viewsets.ModelViewSet):
         AuditLogEntry.record(actor=request.user, action="report.submitted", metadata={"report_id": report.pk})
         return Response(ReportSerializer(report).data)
 
+    @action(
+        detail=True,
+        methods=["post"],
+        permission_classes=[IsEntityMember],
+        parser_classes=[MultiPartParser],
+    )
+    def upload(self, request, *args, **kwargs):
+        report = self.get_object()
+        uploaded_file = request.FILES.get("file")
+        if not uploaded_file:
+            return Response({"detail": "Nie przesłano pliku."}, status=status.HTTP_400_BAD_REQUEST)
+
+        storage_key = f"reports/{uuid4().hex}_{uploaded_file.name}"
+        storage_path = default_storage.save(storage_key, uploaded_file)
+
+        def cleanup_storage() -> None:
+            try:
+                default_storage.delete(storage_path)
+            except Exception:  # pragma: no cover - cleanup best-effort
+                logger.warning("Nie udało się usunąć pliku %s podczas sprzątania", storage_path)
+
+        local_path: str | None = None
+        if hasattr(default_storage, "path"):
+            try:
+                local_path = default_storage.path(storage_path)
+            except (AttributeError, NotImplementedError):
+                local_path = None
+
+        temp_copy: Path | None = None
+        if not local_path:
+            temp_handle = NamedTemporaryFile(delete=False, suffix=Path(storage_path).suffix)
+            with default_storage.open(storage_path, "rb") as source, open(temp_handle.name, "wb") as target:
+                shutil.copyfileobj(source, target)
+            temp_handle.close()
+            temp_copy = Path(temp_handle.name)
+            local_path = temp_copy.as_posix()
+
+        if not local_path:
+            cleanup_storage()
+            return Response(
+                {"detail": "Nie udało się przygotować pliku do walidacji."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+        try:
+            validation_result = validate_report_workbook(local_path)
+        except Exception as exc:  # pragma: no cover - defensive path
+            logger.exception("Walidacja sprawozdania nie powiodła się")
+            cleanup_storage()
+            return Response(
+                {"detail": f"Błąd walidacji sprawozdania: {exc}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        finally:
+            if temp_copy and temp_copy.exists():
+                temp_copy.unlink(missing_ok=True)
+
+        validation_payload = validation_result.to_dict()
+        has_errors = bool(validation_result.errors)
+        summary = (
+            f"Walidacja zakończona sukcesem. Ostrzeżenia: {len(validation_result.warnings)}."
+            if not has_errors
+            else f"Wykryto {len(validation_result.errors)} błędów i {len(validation_result.warnings)} ostrzeżeń."
+        )
+
+        try:
+            with transaction.atomic():
+                report.file_path = storage_path
+                report.validation_errors = json.dumps(validation_payload, ensure_ascii=False)
+                report.save(update_fields=["file_path", "validation_errors", "updated_at"])
+
+                target_status = (
+                    Report.ReportStatus.VALIDATED
+                    if not has_errors
+                    else Report.ReportStatus.VALIDATION_ERRORS
+                )
+                report.set_status(target_status, message=summary)
+                report.timeline.create(
+                    status=report.status,
+                    created_by=request.user,
+                    notes=summary,
+                )
+
+                metadata = validation_payload.get("metadata", {})
+                entity_name = metadata.get("entity_name") or report.entity.name
+                description_lines = [f"Podmiot: {entity_name}"]
+                period_start = metadata.get("period_start")
+                period_end = metadata.get("period_end")
+                if period_start or period_end:
+                    description_lines.append(
+                        f"Okres: {period_start or 'brak'} – {period_end or 'brak'}"
+                    )
+                description_lines.append(
+                    "Status walidacji: "
+                    + ("Sukces" if target_status == Report.ReportStatus.VALIDATED else "Błędy")
+                )
+
+                LibraryDocument.objects.create(
+                    title=(metadata.get("form_name") or report.title or uploaded_file.name),
+                    category=LibraryDocument.DocumentCategory.REPORTING,
+                    version=metadata.get("form_id") or report.report_type,
+                    description="\n".join(description_lines),
+                    file=storage_path,
+                    content=summary,
+                    is_mandatory=False,
+                )
+        except Exception:
+            cleanup_storage()
+            raise
+
+        AuditLogEntry.record(
+            actor=request.user,
+            action="report.uploaded",
+            metadata={
+                "report_id": report.pk,
+                "validation_status": validation_result.status,
+                "errors": len(validation_result.errors),
+                "warnings": len(validation_result.warnings),
+            },
+        )
+
+        report.refresh_from_db()
+        serializer = self.get_serializer(report)
+        return Response(serializer.data)
+
 
 class CaseViewSet(viewsets.ModelViewSet):
     queryset = Case.objects.select_related("entity", "assigned_to").prefetch_related("timeline")
@@ -99,7 +239,11 @@ class CaseViewSet(viewsets.ModelViewSet):
 
 
 class MessageThreadViewSet(viewsets.ModelViewSet):
-    queryset = MessageThread.objects.select_related("entity", "created_by").prefetch_related("participants", "messages")
+    queryset = (
+        MessageThread.objects.select_related("entity", "created_by")
+        .prefetch_related("participants", "messages", "messages__sender")
+        .order_by("-updated_at")
+    )
     serializer_class = MessageThreadSerializer
     permission_classes = [IsAuthenticated]
 
@@ -108,7 +252,11 @@ class MessageThreadViewSet(viewsets.ModelViewSet):
         if self.request.user.is_internal:
             return qs
         entity_ids = EntityMembership.objects.filter(user=self.request.user).values_list("entity_id", flat=True)
-        return qs.filter(Q(entity_id__in=entity_ids) | Q(participants=self.request.user)).distinct()
+        return qs.filter(
+            Q(entity_id__in=entity_ids)
+            | Q(participants=self.request.user)
+            | Q(is_global=True)
+        ).distinct()
 
     def perform_create(self, serializer):
         thread = serializer.save()
@@ -134,6 +282,32 @@ class MessageThreadViewSet(viewsets.ModelViewSet):
             metadata={"thread_id": thread.pk, "message_id": message.pk},
         )
         return Response(MessageSerializer(message).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["post"], permission_classes=[IsInternalUser])
+    def broadcast(self, request, *args, **kwargs):
+        serializer = GlobalMessageBroadcastSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        thread = MessageThread.objects.create(
+            subject=serializer.validated_data["subject"],
+            created_by=request.user,
+            is_internal_only=False,
+            is_global=True,
+        )
+        if request.user:
+            thread.participants.add(request.user)
+        message = thread.add_message(
+            sender=request.user,
+            content=serializer.validated_data["body"],
+            attachments=serializer.validated_data.get("attachments") or [],
+        )
+        AuditLogEntry.record(
+            actor=request.user,
+            action="thread.broadcast",
+            metadata={"thread_id": thread.pk, "message_id": message.pk},
+        )
+        response = self.get_serializer(thread)
+        return Response(response.data, status=status.HTTP_201_CREATED)
 
 
 class AnnouncementViewSet(viewsets.ModelViewSet):

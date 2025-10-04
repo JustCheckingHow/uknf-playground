@@ -71,6 +71,7 @@ ROLE_DESCRIPTIONS = {
 
 class RegisterView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes: list = []
 
     def post(self, request, *args, **kwargs):
         serializer = RegisterUserSerializer(data=request.data, context={"request": request})
@@ -88,6 +89,7 @@ class RegisterView(APIView):
 
 class LoginView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes: list = []
 
     def post(self, request, *args, **kwargs):
         serializer = AuthTokenSerializer(data=request.data, context={"request": request})
@@ -487,6 +489,7 @@ class SessionContextView(APIView):
 
 class ActivateAccountView(APIView):
     permission_classes = [AllowAny]
+    authentication_classes: list = []
 
     def post(self, request, *args, **kwargs):
         serializer = ActivateAccountSerializer(data=request.data)
