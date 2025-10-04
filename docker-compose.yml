@@ -2,48 +2,40 @@ services:
   backend:
     build:
       context: ./backend
-      target: dev
-    working_dir: /app
-    command: dotnet watch run --urls http://0.0.0.0:4000
+      target: runtime
     environment:
-      - PORT=4000
-      - ASPNETCORE_ENVIRONMENT=Development
-      - ASPNETCORE_URLS=http://0.0.0.0:4000
-      - DOTNET_USE_POLLING_FILE_WATCHER=1
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_URLS: http://0.0.0.0:${BACKEND_PORT:-4000}
+      PORT: ${BACKEND_PORT:-4000}
     ports:
-      - "4000:4000"
-    volumes:
-      - ./backend:/app
+      - "${BACKEND_PORT:-4000}:4000"
     depends_on:
       - postgres
+    restart: unless-stopped
 
   frontend:
     build:
       context: ./frontend
-      target: dev
-    working_dir: /app
-    command: npm run dev -- --hostname 0.0.0.0 --port 3000
+      target: runner
     environment:
-      - NEXT_PUBLIC_API_URL=http://backend:4000/api
-      - NODE_ENV=development
+      NODE_ENV: ${NODE_ENV:-production}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://backend:4000/api}
+      PORT: ${FRONTEND_PORT:-3000}
     ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - frontend-node-modules:/app/node_modules
-      - frontend-next-cache:/app/.next
+      - "${FRONTEND_PORT:-3000}:3000"
     depends_on:
       - backend
+    restart: unless-stopped
 
   postgres:
     image: postgres:15-alpine
     restart: unless-stopped
-    ports:
-      - "5432:5432"
     environment:
-      - POSTGRES_USER=uknf
-      - POSTGRES_PASSWORD=uknf
-      - POSTGRES_DB=uknf_platform
+      POSTGRES_USER: ${POSTGRES_USER:-uknf}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-uknf}
+      POSTGRES_DB: ${POSTGRES_DB:-uknf_platform}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
