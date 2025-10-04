@@ -1,0 +1,53 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      target: dev
+    working_dir: /app
+    command: dotnet watch run --urls http://0.0.0.0:4000
+    environment:
+      - PORT=4000
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://0.0.0.0:4000
+      - DOTNET_USE_POLLING_FILE_WATCHER=1
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      - postgres
+
+  frontend:
+    build:
+      context: ./frontend
+      target: dev
+    working_dir: /app
+    command: npm run dev -- --hostname 0.0.0.0 --port 3000
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:4000/api
+      - NODE_ENV=development
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - frontend-node-modules:/app/node_modules
+      - frontend-next-cache:/app/.next
+    depends_on:
+      - backend
+
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=uknf
+      - POSTGRES_PASSWORD=uknf
+      - POSTGRES_DB=uknf_platform
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  frontend-node-modules:
+  frontend-next-cache:
+  postgres-data:

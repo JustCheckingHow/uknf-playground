@@ -1,0 +1,69 @@
+############################
+# General project ignores  #
+############################
+.DS_Store
+Thumbs.db
+*.log
+logs/
+*.tmp
+tmp/
+temp/
+
+############################
+# Environment & secrets    #
+############################
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.local.example
+
+############################
+# Node / Next.js artifacts #
+############################
+**/node_modules/
+**/.pnp/
+.pnp.*
+**/dist/
+**/build/
+**/.next/
+**/out/
+**/coverage/
+**/storybook-static/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.tsbuildinfo
+
+############################
+# .NET build output        #
+############################
+**/bin/
+**/obj/
+**/.vs/
+*.user
+*.suo
+*.userprefs
+*.pdb
+*.mdb
+
+############################
+# Tooling & IDE settings   #
+############################
+.idea/
+.vscode/
+*.code-workspace
+*.sw?
+
+############################
+# Docker / runtime files   #
+############################
+docker-compose.override.yml
+*.pid
+
+############################
+# Miscellaneous            #
+############################
+.tmp/
