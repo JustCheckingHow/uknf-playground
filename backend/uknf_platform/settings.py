@@ -128,7 +128,12 @@ SPECTACULAR_SETTINGS = {
     ],
 }
 
-CORS_ALLOWED_ORIGINS = [origin.strip() for origin in os.getenv("DJANGO_CORS_ORIGINS", "http://localhost:3000").split(",") if origin.strip()]
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "http://localhost:8123",
+    "https://uknf.justcheckinghow.com",
+    "https://uknfapi.justcheckinghow.com",
+]
 CORS_ALLOW_CREDENTIALS = True
 
 FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000").rstrip("/")
