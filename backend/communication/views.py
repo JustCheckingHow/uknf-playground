@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import shutil
+from datetime import date, timedelta
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from uuid import uuid4
@@ -10,13 +11,14 @@ from uuid import uuid4
 from django.core.files.storage import default_storage
 from django.db import transaction
 from django.db.models import Q
+from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from accounts.models import EntityMembership
+from accounts.models import EntityMembership, RegulatedEntity
 from accounts.permissions import IsEntityMember, IsInternalUser
 from administration.models import AuditLogEntry
 from .models import (
@@ -48,6 +50,10 @@ from .services import validate_report_workbook
 logger = logging.getLogger(__name__)
 
 
+class UploadPreparationError(Exception):
+    """Raised when an uploaded report file cannot be prepared for validation."""
+
+
 class ReportViewSet(viewsets.ModelViewSet):
     queryset = Report.objects.select_related("entity", "submitted_by").prefetch_related("timeline")
     serializer_class = ReportSerializer
@@ -56,62 +62,36 @@ class ReportViewSet(viewsets.ModelViewSet):
     ordering_fields = ["submitted_at", "validated_at", "created_at"]
     search_fields = ["title", "entity__name", "report_type"]
 
-    def get_queryset(self):
-        qs = super().get_queryset()
-        if self.request.user.is_internal:
-            return qs
-        entity_ids = EntityMembership.objects.filter(user=self.request.user).values_list("entity_id", flat=True)
-        return qs.filter(entity_id__in=entity_ids)
-
-    @action(detail=True, methods=["post"], permission_classes=[IsInternalUser])
-    def status(self, request, *args, **kwargs):
-        report = self.get_object()
-        serializer = ReportStatusSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        report.set_status(serializer.validated_data["status"], message=serializer.validated_data.get("notes"))
-        report.timeline.create(
-            status=report.status,
-            created_by=request.user,
-            notes=serializer.validated_data.get("notes", ""),
+    def _resolve_entity_id(self, request) -> int | None:
+        entity_id = request.data.get("entity_id") or request.query_params.get("entity_id")
+        if entity_id is not None:
+            try:
+                entity_id = int(entity_id)
+            except (TypeError, ValueError):
+                return None
+            if request.user.is_internal:
+                return entity_id
+            member_entities = set(
+                EntityMembership.objects.filter(user=request.user).values_list("entity_id", flat=True)
+            )
+            return entity_id if entity_id in member_entities else None
+        membership = (
+            EntityMembership.objects.filter(user=request.user)
+            .exclude(entity__isnull=True)
+            .order_by("created_at")
+            .values_list("entity_id", flat=True)
+            .first()
         )
-        AuditLogEntry.record(
-            actor=request.user,
-            action="report.status_change",
-            metadata={"report_id": report.pk, "status": report.status},
-        )
-        return Response(ReportSerializer(report).data)
+        return int(membership) if membership else None
 
-    @action(detail=True, methods=["post"], permission_classes=[IsEntityMember])
-    def submit(self, request, *args, **kwargs):
-        report = self.get_object()
-        report.mark_submitted(request.user)
-        report.timeline.create(
-            status=report.status,
-            created_by=request.user,
-            notes="Sprawozdanie przesłane przez użytkownika",
-        )
-        AuditLogEntry.record(actor=request.user, action="report.submitted", metadata={"report_id": report.pk})
-        return Response(ReportSerializer(report).data)
-
-    @action(
-        detail=True,
-        methods=["post"],
-        permission_classes=[IsEntityMember],
-        parser_classes=[MultiPartParser],
-    )
-    def upload(self, request, *args, **kwargs):
-        report = self.get_object()
-        uploaded_file = request.FILES.get("file")
-        if not uploaded_file:
-            return Response({"detail": "Nie przesłano pliku."}, status=status.HTTP_400_BAD_REQUEST)
-
+    def _prepare_upload(self, uploaded_file):
         storage_key = f"reports/{uuid4().hex}_{uploaded_file.name}"
         storage_path = default_storage.save(storage_key, uploaded_file)
 
         def cleanup_storage() -> None:
             try:
                 default_storage.delete(storage_path)
-            except Exception:  # pragma: no cover - cleanup best-effort
+            except Exception:  # pragma: no cover - best effort cleanup
                 logger.warning("Nie udało się usunąć pliku %s podczas sprzątania", storage_path)
 
         local_path: str | None = None
@@ -132,25 +112,80 @@ class ReportViewSet(viewsets.ModelViewSet):
 
         if not local_path:
             cleanup_storage()
-            return Response(
-                {"detail": "Nie udało się przygotować pliku do walidacji."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            raise UploadPreparationError("Nie udało się przygotować pliku do walidacji.")
+
+        return storage_path, cleanup_storage, local_path, temp_copy
+
+    def _get_or_create_entity(self, request, metadata: dict[str, object] | None) -> RegulatedEntity:
+        entity_id = self._resolve_entity_id(request)
+        if entity_id:
+            return RegulatedEntity.objects.get(pk=entity_id)
+
+        metadata = metadata or {}
+        identifier = str(metadata.get("entity_identifier") or "").strip() or None
+        entity_name = str(metadata.get("entity_name") or "").strip() or None
+
+        if identifier:
+            existing = RegulatedEntity.objects.filter(registration_number__iexact=identifier).first()
+            if existing:
+                return existing
+
+        if entity_name:
+            existing = RegulatedEntity.objects.filter(name__iexact=entity_name).first()
+            if existing:
+                if identifier and not existing.registration_number:
+                    existing.registration_number = identifier
+                    existing.save(update_fields=["registration_number", "updated_at"])
+                return existing
+
+        name = entity_name or f"Podmiot {request.user.email}" if request.user.email else f"Podmiot {uuid4().hex[:6]}"
+        registration_number = identifier or f"UNASSIGNED-{uuid4().hex[:10]}"
+
+        defaults = {
+            "name": name[:255],
+            "registration_number": registration_number,
+            "sector": str(metadata.get("register") or "Nieznany")[:64],
+            "address": str(metadata.get("entity_address") or "Nieznany")[:255],
+            "postal_code": str(metadata.get("postal_code") or "00-000")[:16],
+            "city": str(metadata.get("entity_city") or "Nieznane")[:128],
+            "country": str(metadata.get("entity_country") or "PL")[:64],
+            "contact_email": request.user.email or f"kontakt+{uuid4().hex[:6]}@example.com",
+            "contact_phone": str(metadata.get("contact_phone") or "Brak" )[:32],
+            "website": str(metadata.get("website") or "")[:200],
+            "status": RegulatedEntity.EntityStatus.ACTIVE,
+            "data_source": "upload_new",
+            "notes": "Podmiot utworzony automatycznie podczas przesyłania sprawozdania.",
+            "last_verified_at": timezone.now(),
+        }
+
+        entity, created = RegulatedEntity.objects.get_or_create(
+            registration_number=registration_number,
+            defaults=defaults,
+        )
+        if created and entity.name != name:
+            entity.name = name[:255]
+            entity.save(update_fields=["name", "updated_at"])
+
+        if not request.user.is_internal:
+            EntityMembership.objects.get_or_create(
+                user=request.user,
+                entity=entity,
+                role=EntityMembership.MembershipRole.SUBMITTER,
+                defaults={"is_primary": True},
             )
 
-        try:
-            validation_result = validate_report_workbook(local_path)
-        except Exception as exc:  # pragma: no cover - defensive path
-            logger.exception("Walidacja sprawozdania nie powiodła się")
-            cleanup_storage()
-            return Response(
-                {"detail": f"Błąd walidacji sprawozdania: {exc}"},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        finally:
-            if temp_copy and temp_copy.exists():
-                temp_copy.unlink(missing_ok=True)
+        return entity
 
-        validation_payload = validation_result.to_dict()
+    def _apply_upload_results(
+        self,
+        *,
+        report: Report,
+        uploaded_file,
+        validation_result,
+        validation_payload,
+        storage_path: str,
+        request,
+    ) -> None:
         has_errors = bool(validation_result.errors)
         summary = (
             f"Walidacja zakończona sukcesem. Ostrzeżenia: {len(validation_result.warnings)}."
@@ -200,7 +235,6 @@ class ReportViewSet(viewsets.ModelViewSet):
                     is_mandatory=False,
                 )
         except Exception:
-            cleanup_storage()
             raise
 
         AuditLogEntry.record(
@@ -215,8 +249,189 @@ class ReportViewSet(viewsets.ModelViewSet):
         )
 
         report.refresh_from_db()
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if self.request.user.is_internal:
+            return qs
+        entity_ids = EntityMembership.objects.filter(user=self.request.user).values_list("entity_id", flat=True)
+        return qs.filter(Q(entity_id__in=entity_ids) | Q(submitted_by=self.request.user))
+
+    @action(detail=True, methods=["post"], permission_classes=[IsInternalUser])
+    def status(self, request, *args, **kwargs):
+        report = self.get_object()
+        serializer = ReportStatusSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        report.set_status(serializer.validated_data["status"], message=serializer.validated_data.get("notes"))
+        report.timeline.create(
+            status=report.status,
+            created_by=request.user,
+            notes=serializer.validated_data.get("notes", ""),
+        )
+        AuditLogEntry.record(
+            actor=request.user,
+            action="report.status_change",
+            metadata={"report_id": report.pk, "status": report.status},
+        )
+        return Response(ReportSerializer(report).data)
+
+    @action(detail=True, methods=["post"], permission_classes=[IsEntityMember])
+    def submit(self, request, *args, **kwargs):
+        report = self.get_object()
+        report.mark_submitted(request.user)
+        report.timeline.create(
+            status=report.status,
+            created_by=request.user,
+            notes="Sprawozdanie przesłane przez użytkownika",
+        )
+        AuditLogEntry.record(actor=request.user, action="report.submitted", metadata={"report_id": report.pk})
+        return Response(ReportSerializer(report).data)
+
+    @action(
+        detail=True,
+        methods=["post"],
+        permission_classes=[IsEntityMember],
+        parser_classes=[MultiPartParser],
+    )
+    def upload(self, request, *args, **kwargs):
+        report = self.get_object()
+        uploaded_file = request.FILES.get("file")
+        if not uploaded_file:
+            return Response({"detail": "Nie przesłano pliku."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            storage_path, cleanup_storage, local_path, temp_copy = self._prepare_upload(uploaded_file)
+        except UploadPreparationError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        validation_payload: dict[str, object] | None = None
+        try:
+            validation_result = validate_report_workbook(local_path)
+            validation_payload = validation_result.to_dict()
+        except Exception as exc:  # pragma: no cover - defensive path
+            logger.exception("Walidacja sprawozdania nie powiodła się")
+            cleanup_storage()
+            return Response(
+                {"detail": f"Błąd walidacji sprawozdania: {exc}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        finally:
+            if temp_copy and temp_copy.exists():
+                temp_copy.unlink(missing_ok=True)
+        if validation_payload is None:
+            validation_payload = validation_result.to_dict()
+        try:
+            self._apply_upload_results(
+                report=report,
+                uploaded_file=uploaded_file,
+                validation_result=validation_result,
+                validation_payload=validation_payload,
+                storage_path=storage_path,
+                request=request,
+            )
+        except Exception:
+            cleanup_storage()
+            raise
+
         serializer = self.get_serializer(report)
         return Response(serializer.data)
+
+    @action(
+        detail=False,
+        methods=["post"],
+        permission_classes=[IsAuthenticated],
+        parser_classes=[MultiPartParser],
+    )
+    def upload_new(self, request, *args, **kwargs):
+        uploaded_file = request.FILES.get("file")
+        if not uploaded_file:
+            return Response({"detail": "Nie przesłano pliku."}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            storage_path, cleanup_storage, local_path, temp_copy = self._prepare_upload(uploaded_file)
+        except UploadPreparationError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        validation_payload: dict[str, object] | None = None
+        try:
+            validation_result = validate_report_workbook(local_path)
+            validation_payload = validation_result.to_dict()
+        except Exception as exc:  # pragma: no cover - defensive path
+            logger.exception("Walidacja sprawozdania nie powiodła się")
+            cleanup_storage()
+            return Response(
+                {"detail": f"Błąd walidacji sprawozdania: {exc}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        finally:
+            if temp_copy and temp_copy.exists():
+                temp_copy.unlink(missing_ok=True)
+
+        metadata = validation_payload.get("metadata", {}) if validation_payload else {}
+        entity = self._get_or_create_entity(request, metadata)
+        if not request.user.is_internal:
+            member_entities = set(
+                EntityMembership.objects.filter(user=request.user).values_list("entity_id", flat=True)
+            )
+            if member_entities and entity.pk not in member_entities:
+                cleanup_storage()
+                return Response(
+                    {"detail": "Nie masz uprawnień do przesyłania sprawozdania dla tego podmiotu."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+        period_start_raw = metadata.get("period_start") if isinstance(metadata, dict) else None
+        period_end_raw = metadata.get("period_end") if isinstance(metadata, dict) else None
+
+        try:
+            period_start = date.fromisoformat(str(period_start_raw))
+            period_end = date.fromisoformat(str(period_end_raw))
+        except (TypeError, ValueError):
+            cleanup_storage()
+            return Response(
+                {"detail": "Nie udało się odczytać zakresu okresu sprawozdawczego z pliku."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        title_source = metadata.get("form_name") if isinstance(metadata, dict) else None
+        report_type_source = metadata.get("form_id") if isinstance(metadata, dict) else None
+        title = (str(title_source).strip() if title_source else Path(uploaded_file.name).stem) or "Sprawozdanie"
+        report_type = (str(report_type_source).strip() if report_type_source else metadata.get("register") if isinstance(metadata, dict) else None) or "Nieznany"
+
+        title = title[:255]
+        report_type = report_type[:128]
+
+        try:
+            with transaction.atomic():
+                report = Report.objects.create(
+                    entity=entity,
+                    submitted_by=request.user,
+                    title=title,
+                    report_type=report_type,
+                    period_start=period_start,
+                    period_end=period_end,
+                )
+        except Exception:
+            cleanup_storage()
+            raise
+
+        try:
+            self._apply_upload_results(
+                report=report,
+                uploaded_file=uploaded_file,
+                validation_result=validation_result,
+                validation_payload=validation_payload,
+                storage_path=storage_path,
+                request=request,
+            )
+        except Exception:
+            cleanup_storage()
+            report.delete()  # best-effort rollback if processing fails
+            raise
+
+        if validation_payload is None:
+            validation_payload = validation_result.to_dict()
+
+        serializer = self.get_serializer(report)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
 class CaseViewSet(viewsets.ModelViewSet):

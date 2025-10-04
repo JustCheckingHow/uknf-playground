@@ -18,7 +18,7 @@ export function DashboardSidebar() {
   const location = useLocation();
   const { user } = useAuth();
 
-  const navigation = [...links];
+  const navigation = links.filter((link) => link.href !== '/dashboard/announcements');
   if (user?.role === 'system_admin') {
     navigation.splice(navigation.length - 1, 0, {
       href: '/dashboard/groups',

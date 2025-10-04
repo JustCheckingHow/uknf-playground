@@ -105,9 +105,10 @@ class RegisterUserSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["email", "first_name", "last_name", "pesel", "phone_number", "role"]
+        fields = ["email", "first_name", "last_name", "pesel", "phone_number", "user_type", "role"]
         extra_kwargs = {
             "role": {"default": User.UserRole.ENTITY_ADMIN},
+            "user_type": {"default": User.UserType.BANK},
         }
 
     def create(self, validated_data):

@@ -2,9 +2,6 @@
 
 import { ChangeEvent, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { toast } from 'sonner';
 
 import Select from 'react-select';
@@ -17,15 +14,6 @@ import { apiClient } from '@/lib/api';
 import { useAuth } from '@/hooks/useAuth';
 import { select2Styles, type SelectOption } from '@/components/ui/select2Styles';
 import type { Report, ReportValidationIssue } from '@/types';
-
-const schema = z.object({
-  title: z.string().min(5),
-  report_type: z.string().min(3),
-  period_start: z.string(),
-  period_end: z.string()
-});
-
-type FormValues = z.infer<typeof schema>;
 
 function useReports() {
   return useQuery({
@@ -47,6 +35,8 @@ export default function ReportsPage() {
   const [titleFilter, setTitleFilter] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [validationFilter, setValidationFilter] = useState<string | null>(null);
+  const [uploaderFilter, setUploaderFilter] = useState<string | null>(null);
+  const newReportInputRef = useRef<HTMLInputElement | null>(null);
   const fileInputsRef = useRef<Record<number, HTMLInputElement | null>>({});
 
   const submitReportMutation = useMutation({
@@ -96,35 +86,31 @@ export default function ReportsPage() {
     onSettled: () => setUploadingId(null)
   });
 
-  const createReportMutation = useMutation({
-    mutationFn: async (values: FormValues) => {
-      const actingEntity = profile?.session.acting_entity || profile?.memberships[0]?.entity;
-      if (!actingEntity) {
-        throw new Error('Brak powiązanego podmiotu');
+  const actingEntity = useMemo(() => {
+    return profile?.session.acting_entity || profile?.memberships[0]?.entity || null;
+  }, [profile]);
+
+  const uploadNewReportMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (actingEntity) {
+        formData.append('entity_id', String(actingEntity.id));
       }
-      const payload = { ...values, entity_id: actingEntity.id };
-      const response = await apiClient.post<Report>('/communication/reports/', payload);
+      const response = await apiClient.post<Report>('/communication/reports/upload_new/', formData);
       return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      const hasErrors = Boolean(data.validation?.errors?.length);
+      toast.success(
+        hasErrors
+          ? `Walidacja zakończona z błędami (${data.validation?.errors?.length ?? 0})`
+          : 'Walidacja zakończona sukcesem'
+      );
+      setActiveReportId(data.id);
       queryClient.invalidateQueries({ queryKey: ['reports'] });
-      toast.success('Utworzono szkic sprawozdania');
     },
-    onError: () => toast.error('Nie udało się utworzyć sprawozdania')
-  });
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors }
-  } = useForm<FormValues>({
-    resolver: zodResolver(schema)
-  });
-
-  const onSubmit = handleSubmit(async (values) => {
-    await createReportMutation.mutateAsync(values);
-    reset();
+    onError: () => toast.error('Nie udało się przesłać sprawozdania')
   });
 
   const openFileDialog = (reportId: number) => {
@@ -140,6 +126,15 @@ export default function ReportsPage() {
       return;
     }
     uploadReportMutation.mutate({ reportId, file });
+    event.target.value = '';
+  };
+
+  const handleNewReportFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+    uploadNewReportMutation.mutate(file);
     event.target.value = '';
   };
 
@@ -167,6 +162,19 @@ export default function ReportsPage() {
       }))
       .sort((a, b) => a.label.localeCompare(b.label, 'pl'));
   }, [reports]);
+  const uploaderOptions = useMemo<SelectOption[]>(() => {
+    const uniqueUploaders = Array.from(
+      new Set(
+        reports.map((report) => {
+          const email = report.submitted_by?.email;
+          return email && email.trim() ? email.trim() : null;
+        })
+      )
+    ).filter((email): email is string => Boolean(email));
+    return uniqueUploaders
+      .map((email) => ({ value: email, label: email }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'pl'));
+  }, [reports]);
   const filteredReports = useMemo(() => {
     return reports.filter((report) => {
       if (titleFilter && report.title !== titleFilter) {
@@ -179,9 +187,13 @@ export default function ReportsPage() {
       if (validationFilter && validationStatus !== validationFilter) {
         return false;
       }
+      const uploaderEmail = report.submitted_by?.email?.trim() ?? null;
+      if (uploaderFilter && uploaderEmail !== uploaderFilter) {
+        return false;
+      }
       return true;
     });
-  }, [reports, statusFilter, titleFilter, validationFilter]);
+  }, [reports, statusFilter, titleFilter, validationFilter, uploaderFilter]);
   const displayedReports = filteredReports;
   const activeReport = useMemo(() => {
     if (!reports.length) {
@@ -210,63 +222,43 @@ export default function ReportsPage() {
         <div>
           <h1 className="text-lg font-semibold text-slate-900">Nowe sprawozdanie</h1>
           <p className="text-sm text-slate-600">
-            Uzupełnij podstawowe dane. Po zapisaniu możesz dołączyć plik źródłowy i przesłać sprawozdanie do walidacji UKNF.
+            Prześlij plik XLS lub XLSX ze sprawozdaniem, a system automatycznie utworzy wpis i uruchomi walidację UKNF.
           </p>
         </div>
-        <form className="grid gap-4 md:grid-cols-2" onSubmit={onSubmit}>
-          <label className="text-sm">
-            <span className="text-slate-700">Tytuł sprawozdania</span>
-            <input
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary"
-              {...register('title')}
-            />
-            {errors.title && <span className="mt-1 block text-xs text-red-600">{errors.title.message}</span>}
-          </label>
 
-          <label className="text-sm">
-            <span className="text-slate-700">Typ sprawozdania</span>
-            <input
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary"
-              {...register('report_type')}
-            />
-            {errors.report_type && (
-              <span className="mt-1 block text-xs text-red-600">{errors.report_type.message}</span>
-            )}
-          </label>
-
-          <label className="text-sm">
-            <span className="text-slate-700">Okres od</span>
-            <input
-              type="date"
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary"
-              {...register('period_start')}
-            />
-          </label>
-
-          <label className="text-sm">
-            <span className="text-slate-700">Okres do</span>
-            <input
-              type="date"
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary"
-              {...register('period_end')}
-            />
-          </label>
-
-          <div className="md:col-span-2 flex items-center justify-between">
-            <p className="text-xs text-slate-500">
-              Podmiot przypisany: {profile?.session.acting_entity?.name || profile?.memberships[0]?.entity.name || 'brak'}
+        <div className="flex flex-col gap-4 rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 md:flex-row md:items-center md:justify-between">
+          <div className="text-sm text-slate-600 md:max-w-xl">
+            <p>Wybierz arkusz przygotowany w szablonie UKNF. Po przesłaniu zobaczysz wynik walidacji na liście sprawozdań.</p>
+            <p className="mt-2 text-xs text-slate-500">
+              Podmiot przypisany: {actingEntity?.name ?? 'brak'}
             </p>
-            <Button type="submit" isLoading={createReportMutation.isPending}>
-              Zapisz szkic
-            </Button>
           </div>
-        </form>
+          <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
+            <input
+              ref={newReportInputRef}
+              type="file"
+              accept=".xls,.xlsx"
+              className="hidden"
+              onChange={handleNewReportFileChange}
+              disabled={uploadNewReportMutation.isPending}
+            />
+            <Button
+              onClick={() => {
+                newReportInputRef.current?.click();
+              }}
+              isLoading={uploadNewReportMutation.isPending}
+            >
+              Prześlij plik
+            </Button>
+            <span className="text-xs text-slate-500">Obsługiwane rozszerzenia: .xls, .xlsx</span>
+          </div>
+        </div>
       </Card>
 
       <div className="space-y-3">
         <div className="flex flex-col gap-3">
           <h2 className="text-lg font-semibold text-slate-900">Sprawozdania</h2>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="flex flex-col gap-1 text-sm">
               <label htmlFor="reports-title-filter" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Tytuł
@@ -320,11 +312,29 @@ export default function ReportsPage() {
                 noOptionsMessage={() => 'Brak wyników'}
               />
             </div>
+
+            <div className="flex flex-col gap-1 text-sm">
+              <label htmlFor="reports-uploader-filter" className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Przesłał
+              </label>
+              <Select<SelectOption>
+                inputId="reports-uploader-filter"
+                classNamePrefix="select2"
+                placeholder="Wszyscy użytkownicy"
+                styles={select2Styles}
+                isClearable
+                isDisabled={!uploaderOptions.length}
+                options={uploaderOptions}
+                value={uploaderOptions.find((option) => option.value === uploaderFilter) ?? null}
+                onChange={(option) => setUploaderFilter(option ? option.value : null)}
+                noOptionsMessage={() => 'Brak wyników'}
+              />
+            </div>
           </div>
         </div>
 
         <DataTable
-          headers={["Tytuł", "Status", "Okres", "Walidacja", "Akcje"]}
+          headers={["Tytuł", "Status", "Okres", "Walidacja", "Przesłał", "Akcje"]}
           rows={displayedReports.map((report) => {
             const validationTone = mapValidationTone(report.validation);
             return [
@@ -339,10 +349,13 @@ export default function ReportsPage() {
                 <Badge tone={validationTone}>{mapValidationStatus(report.validation?.status)}</Badge>
                 <span className="text-xs text-slate-500">{formatValidationSummary(report.validation)}</span>
               </div>,
+              <span key={`${report.id}-submitted`} className="text-sm text-slate-600">
+                {report.submitted_by?.email ?? '—'}
+              </span>,
               <div key={`${report.id}-actions`} className="flex flex-wrap items-center gap-2">
                 <input
                   type="file"
-                  accept=".xlsx"
+                  accept=".xls,.xlsx"
                   className="hidden"
                   ref={(element) => {
                     if (element) {

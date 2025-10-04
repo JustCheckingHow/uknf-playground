@@ -2,16 +2,19 @@
 
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { isAxiosError } from 'axios';
 import { toast } from 'sonner';
+import Select from 'react-select';
 
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { apiClient } from '@/lib/api';
 import type { User } from '@/types';
+import { select2Styles, type SelectOption } from '@/components/ui/select2Styles';
+import { USER_TYPE_SELECT_OPTIONS } from '@/lib/userTypes';
 
 const schema = z.object({
   first_name: z
@@ -32,6 +35,9 @@ const schema = z.object({
     .string()
     .trim()
     .regex(/^\d{11}$/, 'PESEL musi składać się z 11 cyfr'),
+  user_type: z.enum(['bank', 'fundusz_inwestycyjny', 'inne'], {
+    required_error: 'Wybierz typ instytucji'
+  }),
   role: z.enum(['entity_admin', 'submitter'])
 });
 
@@ -49,11 +55,13 @@ export default function RegisterPage() {
     handleSubmit,
     reset,
     setError,
+    control,
     formState: { errors, isSubmitting }
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      role: 'entity_admin'
+      role: 'entity_admin',
+      user_type: 'bank'
     }
   });
 
@@ -78,7 +86,15 @@ export default function RegisterPage() {
       const response = await apiClient.post<RegistrationResponse>('/auth/register', values);
       setLastRegisteredUser({ email: response.data.user.email, peselMasked: response.data.user.pesel_masked });
       toast.success('Link aktywacyjny został wysłany na podany adres e-mail.');
-      reset({ role: values.role, email: '', first_name: '', last_name: '', pesel: '', phone_number: '' });
+      reset({
+        role: values.role,
+        user_type: values.user_type,
+        email: '',
+        first_name: '',
+        last_name: '',
+        pesel: '',
+        phone_number: ''
+      });
     } catch (error) {
       if (isAxiosError(error) && error.response?.status === 400 && error.response.data) {
         const data = error.response.data as Record<string, string | string[]>;
@@ -91,6 +107,7 @@ export default function RegisterPage() {
             field === 'email' ||
             field === 'phone_number' ||
             field === 'pesel' ||
+            field === 'user_type' ||
             field === 'role'
           ) {
             setError(field as keyof FormValues, { message: joined });
@@ -181,6 +198,31 @@ export default function RegisterPage() {
             </span>
             {errors.pesel && <span className="mt-1 block text-xs text-red-600">{errors.pesel.message}</span>}
           </label>
+
+          <Controller
+            name="user_type"
+            control={control}
+            render={({ field }) => (
+              <label className="block text-sm">
+                <span className="text-slate-700">Typ instytucji</span>
+                <Select<SelectOption>
+                  className="mt-1"
+                  classNamePrefix="select2"
+                  inputId="registration-user-type"
+                  instanceId="registration-user-type"
+                  options={USER_TYPE_SELECT_OPTIONS}
+                  value={USER_TYPE_SELECT_OPTIONS.find((option) => option.value === field.value) ?? null}
+                  onChange={(option) => field.onChange(option?.value ?? 'bank')}
+                  onBlur={field.onBlur}
+                  styles={select2Styles}
+                  isSearchable
+                />
+                {errors.user_type && (
+                  <span className="mt-1 block text-xs text-red-600">{errors.user_type.message}</span>
+                )}
+              </label>
+            )}
+          />
 
           <fieldset className="space-y-3">
             <legend className="text-sm font-medium text-slate-700">Rola w systemie</legend>
