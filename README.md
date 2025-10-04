@@ -1,7 +1,7 @@
-# UKNF Communication Platform (Django + Next.js)
+# UKNF Communication Platform (Django + React)
 
 
-Demonstration implementation of the UKNF communication and reporting platform. The stack aligns with the architectural guidelines: a Django REST backend providing the secure API surface and a React/Next.js 14 frontend delivering the operator UI. The solution covers the communication, authentication and administration modules described in `REQUIREMENTS.md` and `PROJECT_DETAILS.md`.
+Demonstration implementation of the UKNF communication and reporting platform. The stack aligns with the architectural guidelines: a Django REST backend providing the secure API surface and a React 18 frontend (Vite) delivering the operator UI. The solution covers the communication, authentication and administration modules described in `REQUIREMENTS.md` and `PROJECT_DETAILS.md`.
 
 
 ## Test Admin login 
@@ -15,7 +15,7 @@ Admin1234!
 ## Repository Structure
 
 - `backend/` – Django 5 project with Django REST Framework. Implements custom user model, regulated entity directory, report workflow, secure messaging, announcements, audit logging, password policies, library API and GDPR-oriented utilities.
-- `frontend/` – Next.js 14 application (App Router, TypeScript, Tailwind). Consumes the backend API, offers dashboards for reports, messaging, announcements, document library and self-service settings. Uses `knf_logo.png` in the global layout.
+- `frontend/` – React 18 single-page application built with Vite, TypeScript and Tailwind CSS. Consumes the backend API, offers dashboards for reports, messaging, announcements, document library and self-service settings. Uses `knf_logo.png` in the global layout.
 - `docker-compose.yml` – Production-leaning stack (backend, frontend, Postgres).
 - `dev-docker-compose.yml` – Hot-reload oriented setup for local development.
 - `REQUIREMENTS.md`, `PROJECT_DETAILS.md` – Source specifications.
@@ -56,7 +56,7 @@ Key endpoints (default base: `http://localhost:8000/api`):
 - `GET/PUT /admin/password-policy` – Password hardening policies
 - `GET /admin/audit-logs` – Immutable audit trail
 
-### Frontend (Next.js)
+### Frontend (React)
 
 ```bash
 cd frontend
@@ -64,7 +64,7 @@ npm install
 npm run dev
 ```
 
-Set `NEXT_PUBLIC_API_BASE_URL` to point at the backend (defaults to `http://localhost:8000/api`).
+Set `VITE_API_BASE_URL` to point at the backend (defaults to `http://localhost:8000/api`).
 
 ### Docker Workflow
 
@@ -74,7 +74,7 @@ Development containers with live reload:
 docker compose -f dev-docker-compose.yml up --build
 ```
 
-Production-style build (Gunicorn + Next.js build):
+Production-style build (Gunicorn + Vite build):
 
 ```bash
 docker compose up --build

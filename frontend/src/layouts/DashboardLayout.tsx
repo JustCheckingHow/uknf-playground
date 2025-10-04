@@ -1,25 +1,27 @@
-'use client';
-
-import { ReactNode, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+import { Outlet, useNavigate } from 'react-router-dom';
 import { LogOut } from 'lucide-react';
 
-import { DashboardSidebar } from '@/src/components/layout/DashboardSidebar';
-import { Button } from '@/src/components/ui/Button';
-import { useAuth } from '@/src/hooks/useAuth';
+import { DashboardSidebar } from '@/components/layout/DashboardSidebar';
+import { Button } from '@/components/ui/Button';
+import { useAuth } from '@/hooks/useAuth';
 
-export default function DashboardLayout({ children }: { children: ReactNode }) {
+export function DashboardLayout() {
   const { user, logout, isLoading } = useAuth();
-  const router = useRouter();
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!isLoading && !user) {
-      router.replace('/login');
+      navigate('/login', { replace: true });
     }
-  }, [isLoading, router, user]);
+  }, [isLoading, navigate, user]);
 
   if (isLoading || !user) {
-    return <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500">Ładowanie profilu użytkownika...</div>;
+    return (
+      <div className="rounded-lg border border-slate-200 bg-white p-6 text-sm text-slate-500">
+        Ładowanie profilu użytkownika...
+      </div>
+    );
   }
 
   return (
@@ -35,7 +37,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
             <LogOut size={16} /> Wyloguj się
           </Button>
         </div>
-        {children}
+        <Outlet />
       </div>
     </div>
   );

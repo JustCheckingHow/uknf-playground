@@ -5,10 +5,10 @@ import { useEffect } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { Button } from '@/src/components/ui/Button';
-import { Card } from '@/src/components/ui/Card';
-import { apiClient } from '@/src/lib/api';
-import { useAuth } from '@/src/hooks/useAuth';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { apiClient } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
 
 interface NotificationPreferences {
   notify_via_email: boolean;

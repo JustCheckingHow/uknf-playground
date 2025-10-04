@@ -1,12 +1,8 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# Ensure NODE_ENV is not set to production during build
-ENV NODE_ENV=development
-ENV NEXT_TELEMETRY_DISABLED=1
-
-COPY package*.json ./
-RUN npm install --legacy-peer-deps
+COPY package.json package-lock.json ./
+RUN npm ci
 
 COPY . .
 RUN npm run build
@@ -14,13 +10,12 @@ RUN npm run build
 FROM nginx:alpine AS production
 WORKDIR /usr/share/nginx/html
 
-# Remove default nginx static assets
+ENV NODE_ENV=production
+
 RUN rm -rf ./*
 
-# Copy the static export from builder
-COPY --from=builder /app/out .
+COPY --from=builder /app/dist .
 
-# Create a simple nginx config for SPA
 RUN echo 'server { \
     listen 3000; \
     server_name localhost; \

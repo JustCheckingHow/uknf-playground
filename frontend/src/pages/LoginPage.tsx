@@ -1,14 +1,13 @@
 'use client';
 
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
-import { Button } from '@/src/components/ui/Button';
-import { Card } from '@/src/components/ui/Card';
-import { useAuth } from '@/src/hooks/useAuth';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { useAuth } from '@/hooks/useAuth';
 
 const schema = z.object({
   email: z.string().email('Podaj poprawny adres e-mail'),
@@ -19,7 +18,7 @@ type FormValues = z.infer<typeof schema>;
 
 export default function LoginPage() {
   const { login, isLoading } = useAuth();
-  const router = useRouter();
+  const navigate = useNavigate();
   const {
     register,
     handleSubmit,
@@ -31,7 +30,7 @@ export default function LoginPage() {
   const onSubmit = async (values: FormValues) => {
     const success = await login(values.email, values.password);
     if (success) {
-      router.push('/dashboard');
+      navigate('/dashboard');
     }
   };
 

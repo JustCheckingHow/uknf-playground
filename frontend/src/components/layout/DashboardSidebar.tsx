@@ -1,7 +1,4 @@
-'use client';
-
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { useLocation, Link } from 'react-router-dom';
 import { FileText, MessageSquare, Building2, Megaphone, Library, Shield, ClipboardCheck } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -16,7 +13,7 @@ const links = [
 ];
 
 export function DashboardSidebar() {
-  const pathname = usePathname();
+  const location = useLocation();
 
   return (
     <aside className="space-y-4">
@@ -24,11 +21,13 @@ export function DashboardSidebar() {
         <ul className="space-y-1">
           {links.map((link) => {
             const Icon = link.icon;
-            const isActive = pathname === link.href;
+            const isActive =
+              location.pathname === link.href ||
+              (link.href !== '/dashboard' && location.pathname.startsWith(`${link.href}/`));
             return (
               <li key={link.href}>
                 <Link
-                  href={link.href}
+                  to={link.href}
                   className={clsx(
                     'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition',
                     isActive ? 'bg-primary text-white shadow-sm' : 'text-slate-600 hover:bg-primary/10 hover:text-primary'
@@ -45,7 +44,8 @@ export function DashboardSidebar() {
       <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-4 text-xs text-slate-600">
         <p className="font-semibold text-primary">Ważne</p>
         <p className="mt-1 leading-relaxed">
-          Wszystkie operacje są audytowane. Pamiętaj o zachowaniu poufności danych podmiotów oraz zgodności z politykami UKNF.
+          Wszystkie operacje są audytowane. Pamiętaj o zachowaniu poufności danych podmiotów oraz zgodności z politykami
+          UKNF.
         </p>
       </div>
     </aside>

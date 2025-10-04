@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { ShieldCheck, FileText, MessageSquare, Users } from 'lucide-react';
 
 const featureCards = [

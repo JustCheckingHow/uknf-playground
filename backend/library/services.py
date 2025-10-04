@@ -55,6 +55,8 @@ def extract_text_from_file(uploaded_file: UploadedFile) -> str:
         data = data[:MAX_BYTES_TO_INDEX]
 
     text = data.decode("utf-8", errors="ignore").strip()
+    if "\x00" in text:
+        text = text.replace("\x00", "")
     uploaded_file.seek(0)
     return text
 

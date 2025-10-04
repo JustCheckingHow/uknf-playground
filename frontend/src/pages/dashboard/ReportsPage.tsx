@@ -7,13 +7,13 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 
-import { Button } from '@/src/components/ui/Button';
-import { Card } from '@/src/components/ui/Card';
-import { DataTable } from '@/src/components/ui/DataTable';
-import { Badge } from '@/src/components/ui/Badge';
-import { apiClient } from '@/src/lib/api';
-import { useAuth } from '@/src/hooks/useAuth';
-import type { Report, ReportValidationIssue } from '@/src/types';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { DataTable } from '@/components/ui/DataTable';
+import { Badge } from '@/components/ui/Badge';
+import { apiClient } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
+import type { Report, ReportValidationIssue } from '@/types';
 
 const schema = z.object({
   title: z.string().min(5),

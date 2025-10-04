@@ -1,17 +1,17 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { isAxiosError } from 'axios';
 import { toast } from 'sonner';
 
-import { Button } from '@/src/components/ui/Button';
-import { Card } from '@/src/components/ui/Card';
-import { apiClient } from '@/src/lib/api';
-import type { User } from '@/src/types';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { apiClient } from '@/lib/api';
+import type { User } from '@/types';
 
 const schema = z.object({
   first_name: z
