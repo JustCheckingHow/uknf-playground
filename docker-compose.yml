@@ -1,45 +1,51 @@
 services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: uknf
+      POSTGRES_USER: uknf
+      POSTGRES_PASSWORD: uknf
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U uknf"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
   backend:
     build:
       context: ./backend
-      target: runtime
+      target: dev
+    env_file:
+      - backend/.env.example
     environment:
-      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
-      ASPNETCORE_URLS: http://0.0.0.0:${BACKEND_PORT:-80}
-      PORT: ${BACKEND_PORT:-80}
+      DATABASE_URL: postgres://uknf:uknf@db:5432/uknf
+    volumes:
+      - ./backend:/app
     ports:
-      - "${BACKEND_PORT:-80}:80"
+      - "8000:8000"
     depends_on:
-      - postgres
-    restart: unless-stopped
+      db:
+        condition: service_healthy
 
   frontend:
     build:
       context: ./frontend
-      target: runner
+      target: dev
+    command: sh -c "cp -r /opt/node_modules/. /app/node_modules 2>/dev/null || true && npm run dev"
     environment:
-      NODE_ENV: ${NODE_ENV:-production}
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://backend:80/api}
-      PORT: ${FRONTEND_PORT:-80}
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000/api
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
     ports:
-      - "${FRONTEND_PORT:-80}:80"
+      - "3000:3000"
     depends_on:
       - backend
-    restart: unless-stopped
-
-  postgres:
-    image: postgres:15-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-uknf}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-uknf}
-      POSTGRES_DB: ${POSTGRES_DB:-uknf_platform}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
 
 volumes:
-  frontend-node-modules:
-  frontend-next-cache:
-  postgres-data:
+  pgdata:
+  frontend_node_modules:

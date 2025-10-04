@@ -1,35 +1,28 @@
-# syntax=docker/dockerfile:1.5
+# syntax=docker/dockerfile:1
+
 FROM node:20-alpine AS base
 WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1
 
-FROM base AS deps
-COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* bun.lockb* ./
-RUN npm install
+COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* ./
+RUN npm install --legacy-peer-deps
 
-FROM base AS dev
-ENV NODE_ENV=development
-COPY --from=deps /app/node_modules ./node_modules
+# cache node_modules so we can hydrate bind-mounted volume later
+RUN cp -R node_modules /opt/node_modules
+
 COPY . .
-EXPOSE 80
-CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0", "--port", "80"]
 
-FROM base AS builder
-# Ensure devDependencies are available during the build
-ARG NODE_ENV=production
-ENV NODE_ENV=development
-COPY package.json package-lock.json* pnpm-lock.yaml* yarn.lock* bun.lockb* ./
-RUN npm install
-COPY . .
-ENV NODE_ENV=production
 RUN npm run build
-RUN npm prune --omit=dev
 
-FROM base AS runner
-ENV NODE_ENV=production
-COPY package.json ./package.json
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-EXPOSE 80
+EXPOSE 3000
 CMD ["npm", "run", "start"]
+
+FROM node:20-alpine AS dev
+WORKDIR /app
+
+COPY --from=base /opt/node_modules /opt/node_modules
+COPY --from=base /app/package.json ./
+
+# copy source after package manifest so live reload still works with bind mount
+COPY . .
+
+CMD ["npm", "run", "dev"]

@@ -1,0 +1,45 @@
+[
+  {
+    "model": "accounts.regulatedentity",
+    "pk": 1,
+    "fields": {
+      "name": "Bank Przyszłości S.A.",
+      "registration_number": "BANK12345",
+      "sector": "Bankowość",
+      "address": "Ul. Finansowa 10",
+      "postal_code": "00-001",
+      "city": "Warszawa",
+      "country": "PL",
+      "contact_email": "kontakt@bankprzyszlosci.pl",
+      "contact_phone": "+48 22 000 00 00",
+      "website": "https://bankprzyszlosci.pl",
+      "status": "active",
+      "data_source": "CEIDG",
+      "last_verified_at": "2024-01-15T10:00:00Z"
+    }
+  },
+  {
+    "model": "communication.librarydocument",
+    "pk": 1,
+    "fields": {
+      "title": "Wytyczne raportowe 2024",
+      "category": "reporting",
+      "version": "1.0",
+      "published_at": "2024-01-05T08:00:00Z",
+      "description": "Aktualne wytyczne dotyczące składania sprawozdań dla banków.",
+      "document_url": "https://przyklad.pl/dokumenty/wytyczne-2024.pdf",
+      "is_mandatory": true
+    }
+  },
+  {
+    "model": "communication.faqentry",
+    "pk": 1,
+    "fields": {
+      "question": "Jak złożyć sprawozdanie kwartalne?",
+      "answer": "Zaloguj się jako osoba raportująca i skorzystaj z modułu Sprawozdania.",
+      "category": "Raportowanie",
+      "order": 1,
+      "is_active": true
+    }
+  }
+]

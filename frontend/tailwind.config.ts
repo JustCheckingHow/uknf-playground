@@ -1,14 +1,23 @@
 import type { Config } from 'tailwindcss';
 
 const config: Config = {
-  darkMode: ['class'],
   content: [
     './app/**/*.{ts,tsx}',
-    './components/**/*.{ts,tsx}',
-    './lib/**/*.{ts,tsx}'
+    './src/**/*.{ts,tsx}'
   ],
   theme: {
-    extend: {}
+    extend: {
+      colors: {
+        primary: {
+          DEFAULT: '#004b8d',
+          foreground: '#ffffff'
+        },
+        accent: {
+          DEFAULT: '#ffb703',
+          foreground: '#1b1b1b'
+        }
+      }
+    }
   },
   plugins: []
 };

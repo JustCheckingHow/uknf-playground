@@ -1,69 +1,23 @@
-############################
-# General project ignores  #
-############################
-.DS_Store
-Thumbs.db
-*.log
-logs/
-*.tmp
-tmp/
-temp/
+# Python
+__pycache__/
+*.py[cod]
+*.sqlite3
 
-############################
-# Environment & secrets    #
-############################
+# Django
+backend/static/
+backend/media/
 .env
-.env.*
-!.env.example
-!.env.sample
-!.env.local.example
+backend/.env
 
-############################
-# Node / Next.js artifacts #
-############################
-**/node_modules/
-**/.pnp/
-.pnp.*
-**/dist/
-**/build/
-**/.next/
-**/out/
-**/coverage/
-**/storybook-static/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-*.tsbuildinfo
+# Node
+node_modules/
+frontend/.next/
+frontend/node_modules/
+frontend/dist/
 
-############################
-# .NET build output        #
-############################
-**/bin/
-**/obj/
-**/.vs/
-*.user
-*.suo
-*.userprefs
-*.pdb
-*.mdb
-
-############################
-# Tooling & IDE settings   #
-############################
-.idea/
+# VSCode
 .vscode/
-*.code-workspace
-*.sw?
+.idea/
 
-############################
-# Docker / runtime files   #
-############################
-docker-compose.override.yml
-*.pid
-
-############################
-# Miscellaneous            #
-############################
-.tmp/
+# Mac
+.DS_Store

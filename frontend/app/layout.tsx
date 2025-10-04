@@ -1,70 +1,44 @@
-import './globals.css';
+import '@/app/globals.css';
+import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
+import { Inter } from 'next/font/google';
 import { ReactNode } from 'react';
+import { Toaster } from 'sonner';
 
-import { ThemeToggle } from '@/components/ThemeToggle';
-import { ThemeProvider } from '@/components/theme-provider';
+import { AuthProvider } from '@/src/providers/AuthProvider';
+import { QueryProvider } from '@/src/providers/QueryProvider';
 
-const navigation = [
-  { href: '/', label: 'Overview' },
-  { href: '/reports', label: 'Reports' },
-  { href: '/messages', label: 'Messages' },
-  { href: '/cases', label: 'Cases' },
-  { href: '/announcements', label: 'Announcements' },
-  { href: '/library', label: 'Library' },
-  { href: '/faq', label: 'FAQ' },
-  { href: '/entities', label: 'Entities' }
-];
+const inter = Inter({ subsets: ['latin'] });
 
-export const metadata = {
-  title: 'UKNF Communication Platform',
-  description: 'Demo regulatory communication portal'
+export const metadata: Metadata = {
+  title: 'UKNF Platforma Komunikacyjna',
+  description: 'Bezpieczna platforma komunikacyjna UKNF dla podmiotów nadzorowanych.'
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className="min-h-screen bg-slate-50 text-slate-900 transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100">
-        <ThemeProvider>
-          <div className="flex min-h-screen">
-            <aside className="hidden w-72 flex-col border-r border-slate-200 bg-slate-100 p-6 transition-colors dark:border-slate-800 dark:bg-slate-900 sm:flex">
-              <div className="flex items-center gap-3">
-                <Image
-                  src="/knf_logo.png"
-                  alt="Polish Financial Supervision Authority (UKNF) logo"
-                  width={140}
-                  height={40}
-                  priority
-                  className="h-9 w-auto"
-                />
-                <span className="sr-only">UKNF Platform</span>
-              </div>
-              <nav className="mt-6 flex flex-1 flex-col gap-2 text-sm transition-colors">
-                {navigation.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className="rounded px-3 py-2 font-medium text-slate-600 transition-colors hover:bg-slate-200 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
-                  >
-                    {item.label}
+    <html lang="pl">
+      <body className={`${inter.className} bg-slate-100 text-slate-900`}>
+        <QueryProvider>
+          <AuthProvider>
+            <Toaster richColors position="top-right" />
+            <div className="min-h-screen">
+              <header className="border-b border-slate-200 bg-white">
+                <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
+                  <Link href="/" className="flex items-center gap-3">
+                    <Image src="/knf_logo.png" alt="Logo UKNF" width={48} height={48} priority />
+                    <div>
+                      <p className="text-sm font-semibold uppercase tracking-wider text-primary">Urząd Komisji Nadzoru Finansowego</p>
+                      <p className="text-xs text-slate-600">Platforma komunikacyjna podmiotów nadzorowanych</p>
+                    </div>
                   </Link>
-                ))}
-              </nav>
-              <div className="text-xs text-slate-500 dark:text-slate-500">v0.1.0 demo</div>
-            </aside>
-            <div className="flex flex-1 flex-col">
-              <header className="flex items-center justify-between border-b border-slate-200 bg-white/80 px-6 py-4 backdrop-blur transition-colors dark:border-slate-800 dark:bg-slate-900/60">
-                <div>
-                  <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Secure supervision</p>
-                  <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-50">UKNF Communication Platform</h2>
                 </div>
-                <ThemeToggle />
               </header>
-              <main>{children}</main>
+              <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
             </div>
-          </div>
-        </ThemeProvider>
+          </AuthProvider>
+        </QueryProvider>
       </body>
     </html>
   );
