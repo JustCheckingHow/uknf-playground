@@ -5,10 +5,10 @@ import { FormEvent, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, BookOpen, Download, MessageCircle, Trash, Upload } from 'lucide-react';
 
-import { Button } from '@/src/components/ui/Button';
-import { Card } from '@/src/components/ui/Card';
-import { apiClient } from '@/src/lib/api';
-import type { FaqEntry, LibraryDocument, LibraryQaResponse } from '@/src/types';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { apiClient } from '@/lib/api';
+import type { FaqEntry, LibraryDocument, LibraryQaResponse } from '@/types';
 
 const DOCUMENT_CATEGORY_OPTIONS = [
   { value: 'reporting', label: 'Raportowanie' },

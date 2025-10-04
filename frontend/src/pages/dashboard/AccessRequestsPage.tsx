@@ -8,18 +8,18 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import axios from 'axios';
 import { toast } from 'sonner';
 
-import { Button } from '@/src/components/ui/Button';
-import { Card } from '@/src/components/ui/Card';
-import { Badge } from '@/src/components/ui/Badge';
-import { DataTable } from '@/src/components/ui/DataTable';
-import { apiClient } from '@/src/lib/api';
-import { useAuth } from '@/src/hooks/useAuth';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Badge } from '@/components/ui/Badge';
+import { DataTable } from '@/components/ui/DataTable';
+import { apiClient } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
 import type {
   AccessRequest,
   AccessRequestLine,
   AccessRequestStatus,
   RegulatedEntity
-} from '@/src/types';
+} from '@/types';
 
 const permissionValues = ['reporting', 'cases', 'entity_admin'] as const;
 

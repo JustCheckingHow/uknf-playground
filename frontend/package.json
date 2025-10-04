@@ -2,35 +2,39 @@
   "name": "uknf-communication-platform",
   "private": true,
   "version": "1.0.0",
+  "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
+    "dev": "vite --port 3000 --host",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.0.8",
     "@headlessui/react": "^1.7.18",
     "@heroicons/react": "^2.0.18",
+    "@hookform/resolvers": "^3.3.4",
     "@tanstack/react-query": "^5.32.0",
     "axios": "^1.6.8",
     "clsx": "^2.1.0",
     "lucide-react": "^0.323.0",
-    "next": "^14.1.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-hook-form": "^7.50.0",
-    "zustand": "^4.5.2",
-    "zod": "^3.22.4",
+    "react-router-dom": "^6.23.1",
     "sonner": "^1.5.0",
-    "@hookform/resolvers": "^3.3.4"
+    "zustand": "^4.5.2",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@types/node": "^20.11.19",
     "@types/react": "^18.2.43",
     "@types/react-dom": "^18.2.17",
+    "@vitejs/plugin-react": "^4.2.1",
     "autoprefixer": "^10.4.16",
     "postcss": "^8.4.33",
     "tailwindcss": "^3.4.1",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vite": "^5.2.10"
   }
 }

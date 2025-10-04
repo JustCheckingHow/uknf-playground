@@ -3,12 +3,12 @@
 import { useQuery } from '@tanstack/react-query';
 import { BarChart3, FileText, MessageSquare, Megaphone } from 'lucide-react';
 
-import { Card } from '@/src/components/ui/Card';
-import { Badge } from '@/src/components/ui/Badge';
-import { DataTable } from '@/src/components/ui/DataTable';
-import { apiClient } from '@/src/lib/api';
-import { useAuth } from '@/src/hooks/useAuth';
-import type { Announcement, MessageThread, Report } from '@/src/types';
+import { Card } from '@/components/ui/Card';
+import { Badge } from '@/components/ui/Badge';
+import { DataTable } from '@/components/ui/DataTable';
+import { apiClient } from '@/lib/api';
+import { useAuth } from '@/hooks/useAuth';
+import type { Announcement, MessageThread, Report } from '@/types';
 
 function useReports() {
   return useQuery({

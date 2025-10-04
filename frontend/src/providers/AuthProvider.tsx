@@ -1,10 +1,10 @@
 'use client';
 
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useNavigate } from 'react-router-dom';
 
-import type { ProfileResponse, User } from '@/src/types';
-import { apiClient, setAuthToken } from '@/src/lib/api';
+import type { ProfileResponse, User } from '@/types';
+import { apiClient, setAuthToken } from '@/lib/api';
 
 interface AuthContextValue {
   user: User | null;
@@ -23,7 +23,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<ProfileResponse | null>(null);
   const [token, setTokenState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const storedToken = typeof window !== 'undefined' ? localStorage.getItem('uknf-token') : null;
@@ -87,8 +87,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('uknf-token');
     }
-    router.push('/login');
-  }, [router]);
+    navigate('/login');
+  }, [navigate]);
 
   const value = useMemo(
     () => ({ user, profile, token, isLoading, login, logout, refreshProfile }),

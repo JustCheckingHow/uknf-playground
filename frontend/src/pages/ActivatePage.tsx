@@ -1,6 +1,6 @@
 'use client';
 
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Suspense, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -8,9 +8,9 @@ import { z } from 'zod';
 import { isAxiosError } from 'axios';
 import { toast } from 'sonner';
 
-import { Button } from '@/src/components/ui/Button';
-import { Card } from '@/src/components/ui/Card';
-import { apiClient } from '@/src/lib/api';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { apiClient } from '@/lib/api';
 
 const passwordSchema = z
   .string()
@@ -35,8 +35,8 @@ const schema = z
 type FormValues = z.infer<typeof schema>;
 
 function ActivateForm() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const {
     register,
     handleSubmit,
@@ -68,7 +68,7 @@ function ActivateForm() {
     try {
       await apiClient.post('/auth/activate', values);
       toast.success('Konto zostało aktywowane. Możesz się zalogować.');
-      router.push('/login');
+      navigate('/login');
     } catch (error) {
       if (isAxiosError(error) && error.response?.status === 400 && error.response.data) {
         const data = error.response.data as Record<string, string | string[]>;

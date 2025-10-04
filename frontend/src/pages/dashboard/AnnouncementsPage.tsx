@@ -3,11 +3,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Clock } from 'lucide-react';
 
-import { Button } from '@/src/components/ui/Button';
-import { Card } from '@/src/components/ui/Card';
-import { Badge } from '@/src/components/ui/Badge';
-import { apiClient } from '@/src/lib/api';
-import type { Announcement, MessageThread } from '@/src/types';
+import { Button } from '@/components/ui/Button';
+import { Card } from '@/components/ui/Card';
+import { Badge } from '@/components/ui/Badge';
+import { apiClient } from '@/lib/api';
+import type { Announcement, MessageThread } from '@/types';
 
 function useAnnouncements() {
   return useQuery({
