@@ -222,7 +222,7 @@ export default function RegisterPage() {
           </ol>
           <p>
             Masz już link aktywacyjny?{' '}
-            <Link href="/activate" className="font-semibold text-primary hover:underline">
+            <Link to="/activate" className="font-semibold text-primary hover:underline">
               Aktywuj konto
             </Link>
             .

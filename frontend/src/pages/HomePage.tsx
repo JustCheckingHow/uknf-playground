@@ -40,13 +40,13 @@ export default function HomePage() {
           </p>
           <div className="flex flex-wrap gap-3">
             <Link
-              href="/login"
+              to="/login"
               className="inline-flex items-center justify-center rounded-md bg-primary px-6 py-2 text-sm font-semibold text-white shadow transition hover:bg-primary/90"
             >
               Zaloguj się
             </Link>
             <Link
-              href="/register"
+              to="/register"
               className="inline-flex items-center justify-center rounded-md border border-primary px-6 py-2 text-sm font-semibold text-primary transition hover:bg-primary/5"
             >
               Zarejestruj konto
