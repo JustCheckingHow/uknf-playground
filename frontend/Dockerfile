@@ -17,7 +17,7 @@ RUN rm -rf ./*
 COPY --from=builder /app/dist .
 
 RUN echo 'server { \
-    listen 3000; \
+    listen 80; \
     server_name localhost; \
     root /usr/share/nginx/html; \
     index index.html; \
@@ -26,5 +26,5 @@ RUN echo 'server { \
     } \
 }' > /etc/nginx/conf.d/default.conf
 
-EXPOSE 3000
+EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
