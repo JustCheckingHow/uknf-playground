@@ -4,13 +4,15 @@ import axios from 'axios';
 import { FormEvent, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, BookOpen, Download, MessageCircle, Trash, Upload } from 'lucide-react';
+import Select from 'react-select';
 
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { apiClient } from '@/lib/api';
 import type { FaqEntry, LibraryDocument, LibraryQaResponse } from '@/types';
+import { select2Styles, type SelectOption } from '@/components/ui/select2Styles';
 
-const DOCUMENT_CATEGORY_OPTIONS = [
+const DOCUMENT_CATEGORY_OPTIONS: SelectOption[] = [
   { value: 'reporting', label: 'Raportowanie' },
   { value: 'supervision', label: 'Nadzór' },
   { value: 'legal', label: 'Prawo' },
@@ -204,21 +206,28 @@ export default function LibraryPage() {
             <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
               <div className="grid gap-4">
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  <label className="flex flex-col gap-1 text-sm">
-                    <span className="font-medium text-slate-700">Kategoria</span>
-                    <select
-                      required
-                      value={uploadForm.category}
-                      onChange={(event) => setUploadForm((prev) => ({ ...prev, category: event.target.value }))}
-                      className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none"
-                    >
-                      {DOCUMENT_CATEGORY_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <div className="flex flex-col gap-1 text-sm">
+                    <label htmlFor="library-document-category" className="font-medium text-slate-700">
+                      Kategoria
+                    </label>
+                    <Select<SelectOption>
+                      inputId="library-document-category"
+                      className="mt-1 w-full"
+                      classNamePrefix="select2"
+                      options={DOCUMENT_CATEGORY_OPTIONS}
+                      value={
+                        DOCUMENT_CATEGORY_OPTIONS.find((option) => option.value === uploadForm.category) ?? null
+                      }
+                      isSearchable
+                      styles={select2Styles}
+                      noOptionsMessage={() => 'Brak wyników'}
+                      onChange={(option) => {
+                        if (option) {
+                          setUploadForm((prev) => ({ ...prev, category: option.value }));
+                        }
+                      }}
+                    />
+                  </div>
                   <label className="flex flex-col gap-1 text-sm">
                     <span className="font-medium text-slate-700">Wersja</span>
                     <input

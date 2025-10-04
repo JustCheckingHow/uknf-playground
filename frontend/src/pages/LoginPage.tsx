@@ -75,11 +75,11 @@ export default function LoginPage() {
         <div className="rounded-md bg-slate-50 p-4 text-xs text-slate-600">
           <p className="font-semibold text-slate-700">Pierwszy raz w systemie?</p>
           <p className="mt-1 leading-relaxed">
-            <Link href="/register" className="font-semibold text-primary hover:underline">
+            <Link to="/register" className="font-semibold text-primary hover:underline">
               Złóż wniosek o utworzenie konta
             </Link>{' '}
             i odbierz link aktywacyjny na e-mail. Jeżeli masz już link, przejdź do{' '}
-            <Link href="/activate" className="font-semibold text-primary hover:underline">
+            <Link to="/activate" className="font-semibold text-primary hover:underline">
               aktywacji konta
             </Link>
             .

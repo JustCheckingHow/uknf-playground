@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm } from 'react-hook-form';
+import Select from 'react-select';
+import { isAxiosError } from 'axios';
+import { toast } from 'sonner';
 
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -10,6 +13,30 @@ import { Card } from '@/components/ui/Card';
 import { useAuth } from '@/hooks/useAuth';
 import { apiClient } from '@/lib/api';
 import type { Message, MessageThread, User, UserGroup } from '@/types';
+import { select2Styles, type SelectOption } from '@/components/ui/select2Styles';
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (isAxiosError(error)) {
+    const data = error.response?.data;
+    if (typeof data === 'string') {
+      return data;
+    }
+    if (data && typeof data === 'object') {
+      const detail = (data as { detail?: unknown }).detail;
+      if (typeof detail === 'string') {
+        return detail;
+      }
+      const firstEntry = Object.values(data as Record<string, unknown>)[0];
+      if (Array.isArray(firstEntry) && firstEntry.length > 0 && typeof firstEntry[0] === 'string') {
+        return firstEntry[0];
+      }
+    }
+  }
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return fallback;
+}
 
 interface ThreadFilters {
   groupId?: number;
@@ -33,6 +60,7 @@ interface BroadcastForm {
   targetType: TargetType;
   attachment?: FileList;
 }
+
 
 function useThreads(filters: ThreadFilters) {
   return useQuery({
@@ -138,7 +166,9 @@ export default function MessagesPage() {
     register: registerBroadcast,
     handleSubmit: handleBroadcastSubmit,
     reset: resetBroadcastForm,
-    watch: watchBroadcast
+    watch: watchBroadcast,
+    control: broadcastControl,
+    formState: { errors: broadcastErrors }
   } = useForm<BroadcastForm>({
     defaultValues: { subject: '', body: '', targetType: 'group', groupId: '', userId: '', attachment: undefined }
   });
@@ -148,13 +178,51 @@ export default function MessagesPage() {
   const sendMessageMutation = useMutation({
     mutationFn: async (payload: FormData) => {
       if (!selectedThreadId) throw new Error('Brak wybranego wątku');
-      await apiClient.post(`/communication/messages/${selectedThreadId}/messages/`, payload);
+      const response = await apiClient.post<Message>(
+        `/communication/messages/${selectedThreadId}/messages/`,
+        payload
+      );
+      return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (message) => {
       if (selectedThreadId) {
-        queryClient.invalidateQueries({ queryKey: ['thread', selectedThreadId] });
+        queryClient.setQueryData<Message[]>(['thread', selectedThreadId], (previous) => {
+          if (!previous) {
+            return [message];
+          }
+          return [...previous, message];
+        });
+        queryClient.setQueriesData<MessageThread[]>({ queryKey: ['threads'] }, (previous) => {
+          if (!previous) {
+            return previous;
+          }
+          let didUpdate = false;
+          const updatedThreads = previous.map((thread) => {
+            if (thread.id !== selectedThreadId) {
+              return thread;
+            }
+            didUpdate = true;
+            const messages = thread.messages ? [...thread.messages, message] : [message];
+            return {
+              ...thread,
+              messages,
+              updated_at: new Date().toISOString()
+            };
+          });
+          if (!didUpdate) {
+            return previous;
+          }
+          return [...updatedThreads].sort(
+            (left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime()
+          );
+        });
+        queryClient.invalidateQueries({ queryKey: ['threads'] });
       }
       resetMessageForm({ body: '', attachment: undefined as unknown as FileList });
+      toast.success('Wiadomość została wysłana.');
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Nie udało się wysłać wiadomości. Spróbuj ponownie.'));
     }
   });
 
@@ -175,6 +243,10 @@ export default function MessagesPage() {
         userId: '',
         attachment: undefined as unknown as FileList
       });
+      toast.success('Komunikat został wysłany.');
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error, 'Nie udało się wysłać komunikatu. Sprawdź dane i spróbuj ponownie.'));
     }
   });
 
@@ -194,6 +266,36 @@ export default function MessagesPage() {
     });
     return Array.from(map.values());
   }, [isInternalUser, threads, userGroups]);
+  const groupFilterOptions = useMemo<SelectOption[]>(() => {
+    return [
+      { value: 'all', label: 'Wszystkie grupy' },
+      ...availableGroups.map((group) => ({ value: String(group.id), label: group.name }))
+    ];
+  }, [availableGroups]);
+  const recipientFilterOptions = useMemo<SelectOption[]>(
+    () => [
+      { value: 'all', label: 'Wszyscy' },
+      { value: 'group', label: 'Grupy' },
+      { value: 'user', label: 'Pojedynczy użytkownicy' }
+    ],
+    []
+  );
+  const userOptions = useMemo<SelectOption[]>(() => {
+    return users.map((user) => {
+      const nameParts = [user.first_name, user.last_name].filter(Boolean).join(' ').trim();
+      const label = nameParts ? `${nameParts} - ${user.email}` : user.email;
+      return {
+        value: String(user.id),
+        label
+      };
+    });
+  }, [users]);
+  const groupOptions = useMemo<SelectOption[]>(() => {
+    return availableGroups.map((group) => ({
+      value: String(group.id),
+      label: group.name
+    }));
+  }, [availableGroups]);
   const selectedThread = threads.find((thread) => thread.id === selectedThreadId) ?? null;
 
   useEffect(() => {
@@ -259,37 +361,79 @@ export default function MessagesPage() {
             {targetType === 'group' && (
               <label className="block text-sm text-slate-700">
                 Grupa docelowa
-                <select
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary"
-                  {...registerBroadcast('groupId', {
-                    validate: (value) => (targetType !== 'group' || value) || 'Wybierz grupę'
-                  })}
-                >
-                  <option value="">Wybierz grupę</option>
-                  {availableGroups.map((group) => (
-                    <option key={group.id} value={group.id}>
-                      {group.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="mt-1">
+                  <Controller
+                    control={broadcastControl}
+                    name="groupId"
+                    rules={{
+                      validate: (value) => (targetType !== 'group' || value) || 'Wybierz grupę'
+                    }}
+                    render={({ field }) => {
+                      const selectedOption =
+                        groupOptions.find((option) => option.value === field.value) ?? null;
+                      return (
+                        <Select<SelectOption>
+                          inputId="broadcast-group"
+                          instanceId="broadcast-group"
+                          className="w-full"
+                          classNamePrefix="select2"
+                          options={groupOptions}
+                          placeholder="Wybierz grupę"
+                          isClearable
+                          isSearchable
+                          isLoading={groupsQuery.isLoading}
+                          styles={select2Styles}
+                          noOptionsMessage={() => 'Brak wyników'}
+                          value={selectedOption}
+                          onBlur={field.onBlur}
+                          onChange={(option) => field.onChange(option ? option.value : '')}
+                        />
+                      );
+                    }}
+                  />
+                </div>
+                {broadcastErrors.groupId && (
+                  <p className="mt-1 text-xs text-red-600">{broadcastErrors.groupId.message}</p>
+                )}
               </label>
             )}
             {targetType === 'user' && (
               <label className="block text-sm text-slate-700">
                 Adresat wiadomości
-                <select
-                  className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary"
-                  {...registerBroadcast('userId', {
-                    validate: (value) => (targetType !== 'user' || value) || 'Wybierz użytkownika'
-                  })}
-                >
-                  <option value="">Wybierz użytkownika</option>
-                  {users.map((user) => (
-                    <option key={user.id} value={user.id}>
-                      {user.email}
-                    </option>
-                  ))}
-                </select>
+                <div className="mt-1">
+                  <Controller
+                    control={broadcastControl}
+                    name="userId"
+                    rules={{
+                      validate: (value) => (targetType !== 'user' || value) || 'Wybierz użytkownika'
+                    }}
+                    render={({ field }) => {
+                      const selectedOption =
+                        userOptions.find((option) => option.value === field.value) ?? null;
+                      return (
+                        <Select<SelectOption>
+                          inputId="broadcast-user"
+                          instanceId="broadcast-user"
+                          className="w-full"
+                          classNamePrefix="select2"
+                          options={userOptions}
+                          placeholder="Wybierz użytkownika"
+                          isClearable
+                          isSearchable
+                          isLoading={usersQuery.isLoading}
+                          styles={select2Styles}
+                          noOptionsMessage={() => 'Brak wyników'}
+                          value={selectedOption}
+                          onBlur={field.onBlur}
+                          onChange={(option) => field.onChange(option ? option.value : '')}
+                        />
+                      );
+                    }}
+                  />
+                </div>
+                {broadcastErrors.userId && (
+                  <p className="mt-1 text-xs text-red-600">{broadcastErrors.userId.message}</p>
+                )}
               </label>
             )}
             <label className="md:col-span-2 block text-sm text-slate-700">
@@ -332,33 +476,46 @@ export default function MessagesPage() {
             <p className="text-xs text-slate-500">Zawęź listę wątków według adresatów i daty aktualizacji.</p>
           </div>
           <div className="grid gap-3 md:grid-cols-4">
-            <label className="block text-xs font-medium text-slate-600">
-              Grupa
-              <select
-                value={groupFilter}
-                onChange={(event) => setGroupFilter(event.target.value)}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary"
-              >
-                <option value="all">Wszystkie grupy</option>
-                {availableGroups.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-xs font-medium text-slate-600">
-              Typ odbiorcy
-              <select
-                value={recipientFilter}
-                onChange={(event) => setRecipientFilter(event.target.value as TargetType | 'all')}
-                className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-primary"
-              >
-                <option value="all">Wszyscy</option>
-                <option value="group">Grupy</option>
-                <option value="user">Pojedynczy użytkownicy</option>
-              </select>
-            </label>
+            <div className="text-xs font-medium text-slate-600">
+              <label htmlFor="thread-group-filter" className="block">
+                Grupa
+              </label>
+              <Select<SelectOption>
+                inputId="thread-group-filter"
+                instanceId="thread-group-filter"
+                className="mt-1 w-full"
+                classNamePrefix="select2"
+                options={groupFilterOptions}
+                value={groupFilterOptions.find((option) => option.value === groupFilter) ?? null}
+                isClearable
+                isSearchable
+                styles={select2Styles}
+                noOptionsMessage={() => 'Brak wyników'}
+                onChange={(option) => setGroupFilter(option?.value ?? 'all')}
+              />
+            </div>
+            <div className="text-xs font-medium text-slate-600">
+              <label htmlFor="thread-recipient-filter" className="block">
+                Typ odbiorcy
+              </label>
+              <Select<SelectOption>
+                inputId="thread-recipient-filter"
+                instanceId="thread-recipient-filter"
+                className="mt-1 w-full"
+                classNamePrefix="select2"
+                options={recipientFilterOptions}
+                value={
+                  recipientFilterOptions.find((option) => option.value === recipientFilter) ?? null
+                }
+                isClearable
+                isSearchable
+                styles={select2Styles}
+                noOptionsMessage={() => 'Brak wyników'}
+                onChange={(option) =>
+                  setRecipientFilter((option?.value as TargetType | 'all') ?? 'all')
+                }
+              />
+            </div>
             <label className="block text-xs font-medium text-slate-600">
               Od daty
               <input
