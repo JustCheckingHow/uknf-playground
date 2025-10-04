@@ -200,6 +200,8 @@ class AnnouncementAcknowledgeSerializer(serializers.Serializer):
 
 
 class LibraryDocumentSerializer(serializers.ModelSerializer):
+    document_url = serializers.SerializerMethodField()
+
     class Meta:
         model = LibraryDocument
         fields = [
@@ -211,7 +213,24 @@ class LibraryDocumentSerializer(serializers.ModelSerializer):
             "description",
             "document_url",
             "is_mandatory",
+            "uploaded_at",
         ]
+
+    def get_document_url(self, obj: LibraryDocument) -> str:
+        resolved = obj.resolved_url
+        request = self.context.get("request") if hasattr(self, "context") else None
+        if resolved:
+            if resolved.startswith("http"):
+                return resolved
+            if request is not None:
+                return request.build_absolute_uri(resolved)
+            return resolved
+        if obj.file:
+            file_url = obj.file.url
+            if request is not None:
+                return request.build_absolute_uri(file_url)
+            return file_url
+        return ""
 
 
 class FaqEntrySerializer(serializers.ModelSerializer):

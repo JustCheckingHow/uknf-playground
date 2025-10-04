@@ -73,7 +73,7 @@ class Case(models.Model):
     entity = models.ForeignKey(RegulatedEntity, on_delete=models.CASCADE, related_name="cases")
     reference_code = models.CharField(max_length=64, unique=True)
     title = models.CharField(max_length=255)
-    description = models.TextField()
+    description = models.TextField(blank=True)
     status = models.CharField(max_length=32, choices=CaseStatus.choices, default=CaseStatus.OPEN)
     assigned_to = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name="assigned_cases")
     due_date = models.DateField(null=True, blank=True)
@@ -180,9 +180,20 @@ class LibraryDocument(models.Model):
     category = models.CharField(max_length=64, choices=DocumentCategory.choices)
     version = models.CharField(max_length=32)
     published_at = models.DateTimeField(default=timezone.now)
-    description = models.TextField()
-    document_url = models.URLField()
+    description = models.TextField(blank=True)
+    document_url = models.URLField(blank=True)
+    file = models.FileField(upload_to="library/documents/", null=True, blank=True)
+    content = models.TextField(blank=True)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
     is_mandatory = models.BooleanField(default=False)
+
+    @property
+    def resolved_url(self) -> str:
+        if self.document_url:
+            return self.document_url
+        if self.file:
+            return self.file.url
+        return ""
 
     def __str__(self) -> str:  # pragma: no cover
         return f"LibraryDocument({self.title})"

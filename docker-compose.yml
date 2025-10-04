@@ -21,6 +21,7 @@ services:
       target: dev
     env_file:
       - backend/.env.example
+      - .env
     environment:
       DATABASE_URL: postgres://uknf:uknf@db:5432/uknf
     volumes:

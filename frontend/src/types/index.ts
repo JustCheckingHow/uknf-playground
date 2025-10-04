@@ -135,6 +135,7 @@ export interface LibraryDocument {
   description: string;
   document_url: string;
   is_mandatory: boolean;
+  uploaded_at?: string;
 }
 
 export interface FaqEntry {
@@ -145,6 +146,12 @@ export interface FaqEntry {
   order: number;
   is_active: boolean;
   updated_at: string;
+}
+
+export interface LibraryQaResponse {
+  question: string;
+  answer: string;
+  sources: LibraryDocument[];
 }
 
 export interface ProfileResponse {
