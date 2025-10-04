@@ -4,7 +4,7 @@ services:
       context: ./backend
       target: dev
     working_dir: /app
-    command: dotnet watch run --urls http://0.0.0.0:${BACKEND_PORT:-4000}
+    command: dotnet watch --project /app/UKNF.Backend.csproj run --urls http://0.0.0.0:${BACKEND_PORT:-4000}
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://0.0.0.0:${BACKEND_PORT:-4000}
