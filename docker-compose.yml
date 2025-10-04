@@ -35,8 +35,8 @@ services:
     build:
       context: ./frontend
       target: production
-    environment:
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:8123/api
+    env_file:
+      - .env
     ports:
       - "3000:3000"
     depends_on:
