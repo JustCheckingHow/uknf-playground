@@ -178,11 +178,45 @@ export default function MessagesPage() {
   const sendMessageMutation = useMutation({
     mutationFn: async (payload: FormData) => {
       if (!selectedThreadId) throw new Error('Brak wybranego wątku');
-      await apiClient.post(`/communication/messages/${selectedThreadId}/messages/`, payload);
+      const response = await apiClient.post<Message>(
+        `/communication/messages/${selectedThreadId}/messages/`,
+        payload
+      );
+      return response.data;
     },
-    onSuccess: () => {
+    onSuccess: (message) => {
       if (selectedThreadId) {
-        queryClient.invalidateQueries({ queryKey: ['thread', selectedThreadId] });
+        queryClient.setQueryData<Message[]>(['thread', selectedThreadId], (previous) => {
+          if (!previous) {
+            return [message];
+          }
+          return [...previous, message];
+        });
+        queryClient.setQueriesData<MessageThread[]>({ queryKey: ['threads'] }, (previous) => {
+          if (!previous) {
+            return previous;
+          }
+          let didUpdate = false;
+          const updatedThreads = previous.map((thread) => {
+            if (thread.id !== selectedThreadId) {
+              return thread;
+            }
+            didUpdate = true;
+            const messages = thread.messages ? [...thread.messages, message] : [message];
+            return {
+              ...thread,
+              messages,
+              updated_at: new Date().toISOString()
+            };
+          });
+          if (!didUpdate) {
+            return previous;
+          }
+          return [...updatedThreads].sort(
+            (left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime()
+          );
+        });
+        queryClient.invalidateQueries({ queryKey: ['threads'] });
       }
       resetMessageForm({ body: '', attachment: undefined as unknown as FileList });
       toast.success('Wiadomość została wysłana.');
