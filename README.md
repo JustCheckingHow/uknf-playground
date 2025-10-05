@@ -5,7 +5,9 @@
 - [Prompt analysis report](RAPORT_ANALIZA_LOGOW_CODEX.md)
 - [Prompt details dossier](prompts.md)
 
-Demonstration implementation of the UKNF communication and reporting platform. The stack aligns with the architectural guidelines: a Django REST backend providing the secure API surface and a React 18 frontend (Vite) delivering the operator UI. The solution covers the communication, authentication and administration modules described in `REQUIREMENTS.md` and `PROJECT_DETAILS.md`.
+Demonstration implementation of the UKNF communication and reporting platform. The stack aligns with the architectural guidelines: a Django REST backend providing the secure API surface and a React 18 frontend (Vite) delivering the operator UI. The solution covers the communication, authentication and administration modules described in `REQUIREMENTS.md`.
+
+See interesting charts as well in `charts/` folder
 
 
 ## Feature Highlights
@@ -33,7 +35,7 @@ Admin1234!
 - `frontend/` – React 18 single-page application built with Vite, TypeScript and Tailwind CSS. Consumes the backend API, offers dashboards for reports, messaging, announcements, document library and self-service settings. Uses `knf_logo.png` in the global layout.
 - `docker-compose.yml` – Production-leaning stack (backend, frontend, Postgres).
 - `dev-docker-compose.yml` – Hot-reload oriented setup for local development.
-- `REQUIREMENTS.md`, `PROJECT_DETAILS.md` – Source specifications.
+- `REQUIREMENTS.md` – Source specifications.
 - `DETAILS_UKNF_#Prompt2Code2.pdf` – Original supporting material.
 
 ## System Architecture
@@ -149,7 +151,7 @@ Set `VITE_API_BASE_URL` to point at the backend (defaults to `http://localhost:8
 Development containers with live reload:
 
 ```bash
-docker compose -f dev-docker-compose.yml up --build
+docker compose -f docker-compose.yml up --build
 ```
 
 Production-style build (Gunicorn + Vite build):
@@ -180,7 +182,7 @@ python manage.py test
 
 ## Accessibility & UX Highlights
 
-- WCAG-friendly palette and focus states
+**- WCAG-friendly palette and focus states**
 - Responsive dashboard layout with quick access cards
 - Status badges reflecting report validation states
 - Forms with validation feedback (React Hook Form + Zod)

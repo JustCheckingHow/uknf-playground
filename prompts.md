@@ -1,3 +1,28 @@
+# Seed Prompt
+
+We used this seed prompt to seed the main specifications file from PDF:
+(Claude Sonnet 4.5)
+
+```
+Please create PROJECT.md file where you will oitline all detailed requirements for the project that will then serve as a template for further building of hte application.
+
+Chose a framework, design the application, outline DETAILED requirements.
+Break it down into implementation steps. 
+Then, outline specific details on how each step should be implemented.
+@PROJECT_DETAILS.md 
+The UI has to be enterprise-grade and high quality. Remember to include this in the requirements..
+
+UKNF is the financial institution so please keep that in mind when desiging the app. 
+
+Also, remember to include accessibiility standard features such as WCAG into the design. 
+REMEMBER IT IS CRUCIAL FOR YOU TO RETAIN ALL THE REQUIREMENTS FROM THE ATTACHED DOC.
+
+DO not restrict yourself when it comes to the lenght of the file. 
+Create ONLY the README.md file. Please iterate a couple of times on that file, re-read it to make sure it fullfills all the requirements. 
+```
+
+Please pay attention to the last line -- README.md is the key!
+
 # Codex Session Prompts Analysis
 
 This report shows the first user prompt from each session along with the total output tokens generated.
