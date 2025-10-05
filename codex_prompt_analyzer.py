@@ -8,7 +8,7 @@ import json
 import sys
 import csv
 from pathlib import Path
-afrom datetime import datetime, timedelta
+from datetime import datetime, timedelta
 from collections import defaultdict
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -89,6 +89,32 @@ def count_interactions(events):
     return interaction_count
 
 
+def extract_first_user_prompt(events):
+    """Extract the first user prompt from session events."""
+    for event in events:
+        if event.get('type') == 'response_item':
+            payload = event.get('payload', {})
+            if payload.get('type') == 'message' and payload.get('role') == 'user':
+                content = payload.get('content', [])
+                # Extract text from content
+                for item in content:
+                    if item.get('type') == 'input_text':
+                        text = item.get('text', '')
+                        # Clean up the text - remove environment context if it's there
+                        if '<environment_context>' in text:
+                            # Skip environment context, look for actual user query
+                            continue
+                        if '## My request for Codex:' in text:
+                            # Extract just the user's request
+                            parts = text.split('## My request for Codex:')
+                            if len(parts) > 1:
+                                return parts[1].strip()
+                        # Return the text if it's not environment info
+                        if text and not text.startswith('<environment_context>'):
+                            return text.strip()
+    return "No user prompt found"
+
+
 def analyze_sessions(folders):
     """Analyze all session files in the given folders."""
     all_token_events = []
@@ -117,11 +143,21 @@ def analyze_sessions(folders):
             # Sum total output tokens for this session
             total_tokens = sum(te['output_tokens'] for te in token_events)
             
+            # Extract first user prompt
+            first_prompt = extract_first_user_prompt(events)
+            
+            # Get session start time
+            session_start_time = None
+            if token_events:
+                session_start_time = min(te['timestamp'] for te in token_events)
+            
             session_data.append({
                 'session_name': jsonl_file.stem,
                 'interactions': interactions,
                 'total_tokens': total_tokens,
-                'token_events': token_events
+                'token_events': token_events,
+                'first_prompt': first_prompt,
+                'start_time': session_start_time
             })
             
             print(f"  - {len(token_events)} token events, {interactions} interactions, {total_tokens} total output tokens")
@@ -233,6 +269,41 @@ def save_scatter_csv(session_data, output_dir):
                 row['interactions']
             ])
     print(f"Saved scatter plot data to {csv_path}")
+
+
+def generate_prompts_markdown(session_data, output_dir):
+    """Generate markdown file with first user prompts and their session token counts."""
+    if not session_data:
+        return
+    
+    # Sort sessions by start time
+    sorted_sessions = sorted([s for s in session_data if s.get('start_time')], 
+                            key=lambda x: x['start_time'])
+    
+    md_path = output_dir / 'session_prompts_report.md'
+    with open(md_path, 'w', encoding='utf-8') as f:
+        f.write('# Codex Session Prompts Analysis\n\n')
+        f.write('This report shows the first user prompt from each session along with the total output tokens generated.\n\n')
+        f.write(f'**Total Sessions**: {len(sorted_sessions)}\n\n')
+        f.write(f'**Generated**: {datetime.now().strftime("%Y-%m-%d %H:%M:%S")} (GMT+2)\n\n')
+        f.write('---\n\n')
+        
+        for idx, session in enumerate(sorted_sessions, 1):
+            start_time = session['start_time'].strftime('%d %H:%M') if session.get('start_time') else 'Unknown'
+            total_tokens = session['total_tokens']
+            interactions = session['interactions']
+            prompt = session.get('first_prompt', 'No prompt found')
+            
+            f.write(f'## Session {idx}\n\n')
+            f.write(f'**Time**: {start_time} (GMT+2)  \n')
+            f.write(f'**Total Output Tokens**: {total_tokens:,}  \n')
+            f.write(f'**Interactions**: {interactions}  \n')
+            f.write(f'**Session ID**: `{session["session_name"]}`\n\n')
+            f.write(f'### First User Prompt\n\n')
+            f.write(f'```\n{prompt}\n```\n\n')
+            f.write('---\n\n')
+    
+    print(f"Saved prompts report to {md_path}")
 
 
 def create_timeline_chart(token_events, output_dir):
@@ -453,6 +524,10 @@ def main():
     save_scatter_csv(session_data, output_dir)
     print()
     
+    # Generate markdown report with prompts
+    generate_prompts_markdown(session_data, output_dir)
+    print()
+    
     # Generate charts
     create_timeline_chart(all_token_events, output_dir)
     create_interaction_histogram(session_data, output_dir)
@@ -490,6 +565,8 @@ def main():
     print(f"    - interactions_data.csv")
     print(f"    - tokens_per_session_data.csv")
     print(f"    - session_scatter_data.csv")
+    print(f"  Reports:")
+    print(f"    - session_prompts_report.md")
 
 
 if __name__ == '__main__':
