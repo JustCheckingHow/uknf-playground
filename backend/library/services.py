@@ -7,10 +7,13 @@ from functools import lru_cache
 from typing import Iterable, Sequence
 
 from django.conf import settings
+from django.contrib.auth.models import AnonymousUser
 from django.core.files.uploadedfile import UploadedFile
-from django.db.models import Q
+from django.db.models import Q, QuerySet
 
+from accounts.models import User
 from communication.models import LibraryDocument
+from .utils import filter_documents_for_user
 
 logger = logging.getLogger(__name__)
 
@@ -67,20 +70,27 @@ def _tokenize_query(query: str) -> Iterable[str]:
             yield token
 
 
-def select_relevant_documents(question: str) -> list[LibraryDocument]:
-    semantic_matches = _semantic_search(question)
+def select_relevant_documents(
+    question: str,
+    user: AnonymousUser | User | None = None,
+) -> list[LibraryDocument]:
+    accessible_documents = filter_documents_for_user(
+        LibraryDocument.objects.all(),
+        user,
+    )
+    semantic_matches = _semantic_search(question, accessible_documents)
     if semantic_matches:
         return semantic_matches
-    return _fallback_documents(question)
+    return _fallback_documents(question, accessible_documents)
 
 
-def _semantic_search(question: str) -> list[LibraryDocument]:
+def _semantic_search(question: str, queryset: QuerySet[LibraryDocument]) -> list[LibraryDocument]:
     embedding = compute_text_embedding(question)
     if not embedding:
         return []
 
     candidate_rows = list(
-        LibraryDocument.objects.exclude(embedding__isnull=True)
+        queryset.exclude(embedding__isnull=True)
         .exclude(embedding=[])
         .values("id", "embedding")
     )
@@ -100,13 +110,15 @@ def _semantic_search(question: str) -> list[LibraryDocument]:
 
     scored_ids.sort(key=lambda item: item[0], reverse=True)
     top_ids = [item[1] for item in scored_ids[:MAX_DOCUMENTS]]
-    documents_by_id = LibraryDocument.objects.in_bulk(top_ids)
+    documents_by_id = {doc.pk: doc for doc in queryset.filter(pk__in=top_ids)}
     return [documents_by_id[doc_id] for doc_id in top_ids if doc_id in documents_by_id]
 
 
-def _fallback_documents(question: str) -> list[LibraryDocument]:
+def _fallback_documents(
+    question: str,
+    queryset: QuerySet[LibraryDocument],
+) -> list[LibraryDocument]:
     tokens = list(_tokenize_query(question))
-    queryset = LibraryDocument.objects.all()
     if tokens:
         query = Q()
         for token in tokens:
@@ -119,9 +131,7 @@ def _fallback_documents(question: str) -> list[LibraryDocument]:
     documents = list(queryset.order_by("-published_at")[:MAX_DOCUMENTS])
     if not documents:
         documents = list(
-            LibraryDocument.objects.order_by("-published_at")[
-                :SIMILARITY_FALLBACK_LIMIT
-            ]
+            queryset.order_by("-published_at")[:SIMILARITY_FALLBACK_LIMIT]
         )
     return documents
 
@@ -217,8 +227,11 @@ def get_library_agent() -> Agent:
     )
 
 
-def generate_library_answer(question: str) -> tuple[str, list[LibraryDocument]]:
-    documents = select_relevant_documents(question)
+def generate_library_answer(
+    question: str,
+    user: AnonymousUser | User | None = None,
+) -> tuple[str, list[LibraryDocument]]:
+    documents = select_relevant_documents(question, user)
     context_text = build_document_context(documents)
     agent = get_library_agent()
     prompt = (

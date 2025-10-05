@@ -227,6 +227,13 @@ class LibraryDocument(models.Model):
     content = models.TextField(blank=True)
     embedding = models.JSONField(blank=True, default=list)
     uploaded_at = models.DateTimeField(auto_now_add=True)
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="uploaded_library_documents",
+    )
     is_mandatory = models.BooleanField(default=False)
 
     @property
