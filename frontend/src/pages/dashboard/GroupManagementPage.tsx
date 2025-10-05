@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import Select from 'react-select';
+import Select, { type MultiValue, type StylesConfig } from 'react-select';
 
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -19,6 +19,17 @@ type GroupPayload = {
   user_ids: number[];
 };
 
+type UpdateGroupVariables = {
+  groupId: number;
+  payload: Partial<GroupPayload>;
+  successMessage: string;
+};
+
+type DeleteGroupVariables = {
+  groupId: number;
+  groupName: string;
+};
+
 export default function GroupManagementPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -29,6 +40,8 @@ export default function GroupManagementPage() {
   const [selectedUsers, setSelectedUsers] = useState<Set<number>>(new Set());
   const [isCreateModeVisible, setIsCreateModeVisible] = useState(false);
   const [groupName, setGroupName] = useState('');
+  const [pendingAddMembers, setPendingAddMembers] = useState<Record<number, string[]>>({});
+  const multiSelectStyles = select2Styles as unknown as StylesConfig<SelectOption, true>;
 
   const userTypeOptions = useMemo<SelectOption[]>(
     () => [{ value: 'all', label: 'Wszyscy' }, ...USER_TYPE_SELECT_OPTIONS],
@@ -82,6 +95,40 @@ export default function GroupManagementPage() {
     }
   });
 
+  const updateGroupMutation = useMutation({
+    mutationFn: async ({ groupId, payload }: UpdateGroupVariables) => {
+      await apiClient.patch(`/auth/user-groups/${groupId}/`, payload);
+    },
+    onSuccess: (_, variables) => {
+      toast.success(variables.successMessage);
+      setPendingAddMembers((prev) => ({ ...prev, [variables.groupId]: [] }));
+      queryClient.invalidateQueries({ queryKey: ['user-groups'] });
+      queryClient.invalidateQueries({ queryKey: ['group-users'] });
+    },
+    onError: () => {
+      toast.error('Nie udało się zaktualizować grupy. Spróbuj ponownie później.');
+    }
+  });
+
+  const deleteGroupMutation = useMutation({
+    mutationFn: async ({ groupId }: DeleteGroupVariables) => {
+      await apiClient.delete(`/auth/user-groups/${groupId}/`);
+    },
+    onSuccess: (_, variables) => {
+      toast.success(`Grupa "${variables.groupName}" została usunięta.`);
+      setPendingAddMembers((prev) => {
+        const next = { ...prev };
+        delete next[variables.groupId];
+        return next;
+      });
+      queryClient.invalidateQueries({ queryKey: ['user-groups'] });
+      queryClient.invalidateQueries({ queryKey: ['group-users'] });
+    },
+    onError: () => {
+      toast.error('Nie udało się usunąć grupy. Spróbuj ponownie później.');
+    }
+  });
+
   const isLoading = usersQuery.isLoading;
   const users = usersQuery.data ?? [];
   const groups = groupsQuery.data ?? [];
@@ -132,6 +179,48 @@ export default function GroupManagementPage() {
       return;
     }
     createGroupMutation.mutate({ name: groupName.trim(), user_ids: Array.from(selectedUsers) });
+  };
+
+  const handleRemoveMember = async (group: UserGroup, userId: number) => {
+    const remaining = group.users.map((member) => member.id).filter((id) => id !== userId);
+    if (remaining.length === group.users.length) {
+      return;
+    }
+    try {
+      await updateGroupMutation.mutateAsync({
+        groupId: group.id,
+        payload: { user_ids: remaining },
+        successMessage: 'Zapisano zmiany w grupie.'
+      });
+    } catch {
+      /* already handled in onError */
+    }
+  };
+
+  const handleAddMembers = async (group: UserGroup) => {
+    const selected = pendingAddMembers[group.id] ?? [];
+    if (!selected.length) {
+      toast.info('Wybierz użytkowników, których chcesz dodać do grupy.');
+      return;
+    }
+    const currentMemberIds = new Set(group.users.map((member) => member.id));
+    selected.forEach((value) => currentMemberIds.add(Number(value)));
+    try {
+      await updateGroupMutation.mutateAsync({
+        groupId: group.id,
+        payload: { user_ids: Array.from(currentMemberIds) },
+        successMessage: 'Nowi użytkownicy zostali dodani do grupy.'
+      });
+    } catch {
+      /* already handled in onError */
+    }
+  };
+
+  const handleDeleteGroup = (group: UserGroup) => {
+    if (!window.confirm(`Czy na pewno chcesz usunąć grupę "${group.name}"?`)) {
+      return;
+    }
+    deleteGroupMutation.mutate({ groupId: group.id, groupName: group.name });
   };
 
   if (user?.role !== 'system_admin') {
@@ -310,30 +399,99 @@ export default function GroupManagementPage() {
           <p className="text-sm text-slate-500">Nie utworzono jeszcze żadnych grup.</p>
         ) : (
           <ul className="space-y-3">
-            {groups.map((group) => (
-              <li key={group.id} className="rounded-lg border border-slate-200 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-base font-semibold text-slate-900">{group.name}</h3>
-                    <p className="text-xs text-slate-500">{group.members_count} członków</p>
+            {groups.map((group) => {
+              const currentUpdatePending =
+                updateGroupMutation.isPending && updateGroupMutation.variables?.groupId === group.id;
+              const currentDeletePending =
+                deleteGroupMutation.isPending && deleteGroupMutation.variables?.groupId === group.id;
+              const plannedAdditions = pendingAddMembers[group.id] ?? [];
+              const availableOptions: SelectOption[] = users
+                .filter((candidate) => !group.users.some((member) => member.id === candidate.id))
+                .map((candidate) => ({
+                  value: String(candidate.id),
+                  label:
+                    candidate.first_name || candidate.last_name
+                      ? `${candidate.first_name} ${candidate.last_name}`.trim()
+                      : candidate.email
+                }));
+              const selectedOptions = plannedAdditions.reduce<SelectOption[]>((acc, value) => {
+                const option = availableOptions.find((item) => item.value === value);
+                if (option) {
+                  acc.push(option);
+                  return acc;
+                }
+                const fallbackUser = users.find((candidate) => String(candidate.id) === value);
+                if (fallbackUser) {
+                  acc.push({
+                    value,
+                    label:
+                      fallbackUser.first_name || fallbackUser.last_name
+                        ? `${fallbackUser.first_name} ${fallbackUser.last_name}`.trim()
+                        : fallbackUser.email
+                  });
+                }
+                return acc;
+              }, []);
+
+              return (
+                <li key={group.id} className="rounded-lg border border-slate-200 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="text-base font-semibold text-slate-900">{group.name}</h3>
+                      <p className="text-xs text-slate-500">{group.members_count} członków</p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs text-slate-500">
+                        Utworzono: {new Date(group.created_at).toLocaleDateString('pl-PL')}
+                      </span>
+                      <Button variant="ghost" size="sm" onClick={() => handleDeleteGroup(group)} isLoading={currentDeletePending}>
+                        Usuń grupę
+                      </Button>
+                    </div>
                   </div>
-                  <div className="text-xs text-slate-500">
-                    Utworzono: {new Date(group.created_at).toLocaleDateString('pl-PL')}
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {group.users.length ? (
+                      group.users.map((member) => (
+                        <div key={member.id} className="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs">
+                          <span className="text-slate-700">
+                            {member.first_name || member.last_name ? `${member.first_name} ${member.last_name}`.trim() : member.email}
+                          </span>
+                          <Button variant="ghost" size="sm" onClick={() => handleRemoveMember(group, member.id)} isLoading={currentUpdatePending}>
+                            Usuń
+                          </Button>
+                        </div>
+                      ))
+                    ) : (
+                      <span className="text-xs text-slate-500">Brak przypisanych członków.</span>
+                    )}
                   </div>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {group.users.length ? (
-                    group.users.map((member) => (
-                      <Badge key={member.id} tone="default">
-                        {member.first_name || member.last_name ? `${member.first_name} ${member.last_name}`.trim() : member.email}
-                      </Badge>
-                    ))
-                  ) : (
-                    <span className="text-xs text-slate-500">Brak przypisanych członków.</span>
-                  )}
-                </div>
-              </li>
-            ))}
+                  <div className="mt-4 flex flex-col gap-2 md:flex-row md:items-center">
+                    <div className="flex-1">
+                      <Select<SelectOption, true>
+                        className="w-full"
+                        classNamePrefix="select2"
+                        isMulti
+                        isSearchable
+                        placeholder="Dodaj użytkowników do grupy"
+                        styles={multiSelectStyles}
+                        noOptionsMessage={() => 'Brak użytkowników do dodania'}
+                        options={availableOptions}
+                        value={selectedOptions}
+                        onChange={(options: MultiValue<SelectOption>) =>
+                          setPendingAddMembers((prev) => ({
+                            ...prev,
+                            [group.id]: options.map((option) => option.value)
+                          }))
+                        }
+                      />
+                    </div>
+                    <Button size="sm" onClick={() => handleAddMembers(group)} isLoading={currentUpdatePending}>
+                      Dodaj do grupy
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </Card>

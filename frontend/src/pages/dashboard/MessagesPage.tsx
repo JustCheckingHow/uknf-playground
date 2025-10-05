@@ -58,7 +58,6 @@ interface BroadcastForm {
   groupId?: string;
   userId?: string;
   targetType: TargetType;
-  attachment?: FileList;
 }
 
 
@@ -170,8 +169,12 @@ export default function MessagesPage() {
     control: broadcastControl,
     formState: { errors: broadcastErrors }
   } = useForm<BroadcastForm>({
-    defaultValues: { subject: '', body: '', targetType: 'group', groupId: '', userId: '', attachment: undefined }
+    defaultValues: { subject: '', body: '', targetType: 'group', groupId: '', userId: '' }
   });
+
+  const [broadcastAttachmentName, setBroadcastAttachmentName] = useState<string | null>(null);
+  const [broadcastAttachment, setBroadcastAttachment] = useState<File | null>(null);
+  const [broadcastAttachmentInputKey, setBroadcastAttachmentInputKey] = useState(0);
 
   const targetType = watchBroadcast('targetType') ?? 'group';
 
@@ -232,7 +235,18 @@ export default function MessagesPage() {
       return response.data;
     },
     onSuccess: (thread) => {
+      console.info('[MessagesPage] Broadcast succeeded', {
+        threadId: thread.id,
+        messageCount: thread.messages.length,
+        targetGroupId: thread.target_group?.id,
+        targetUserId: thread.target_user?.id
+      });
       setSelectedThreadId(thread.id);
+      // Clear filters to ensure the new thread is visible
+      setGroupFilter('all');
+      setRecipientFilter('all');
+      setDateFrom('');
+      setDateTo('');
       queryClient.invalidateQueries({ queryKey: ['threads'] });
       queryClient.setQueryData<Message[]>(['thread', thread.id], thread.messages);
       resetBroadcastForm({
@@ -240,12 +254,15 @@ export default function MessagesPage() {
         body: '',
         targetType: 'group',
         groupId: '',
-        userId: '',
-        attachment: undefined as unknown as FileList
+        userId: ''
       });
+      setBroadcastAttachmentName(null);
+      setBroadcastAttachment(null);
+      setBroadcastAttachmentInputKey((key) => key + 1);
       toast.success('Komunikat został wysłany.');
     },
     onError: (error) => {
+      console.error('[MessagesPage] Broadcast failed', error);
       toast.error(getErrorMessage(error, 'Nie udało się wysłać komunikatu. Sprawdź dane i spróbuj ponownie.'));
     }
   });
@@ -317,6 +334,14 @@ export default function MessagesPage() {
           <form
             className="grid gap-3 md:grid-cols-2"
             onSubmit={handleBroadcastSubmit((values) => {
+              console.info('[MessagesPage] Submitting broadcast', {
+                subject: values.subject,
+                targetType: values.targetType,
+                groupId: values.groupId,
+                userId: values.userId,
+                hasAttachment: Boolean(broadcastAttachment),
+                attachmentName: broadcastAttachmentName
+              });
               const formData = new FormData();
               formData.append('subject', values.subject);
               formData.append('body', values.body);
@@ -327,9 +352,8 @@ export default function MessagesPage() {
               if (values.targetType === 'user' && values.userId) {
                 formData.append('user', values.userId);
               }
-              const attachment = values.attachment?.item(0);
-              if (attachment) {
-                formData.append('attachment', attachment);
+              if (broadcastAttachment) {
+                formData.append('attachment', broadcastAttachment);
               }
               broadcastMutation.mutate(formData);
             })}
@@ -366,7 +390,12 @@ export default function MessagesPage() {
                     control={broadcastControl}
                     name="groupId"
                     rules={{
-                      validate: (value) => (targetType !== 'group' || value) || 'Wybierz grupę'
+                      validate: (value) => {
+                        if (targetType !== 'group') {
+                          return true;
+                        }
+                        return value ? true : 'Wybierz grupę';
+                      }
                     }}
                     render={({ field }) => {
                       const selectedOption =
@@ -405,7 +434,12 @@ export default function MessagesPage() {
                     control={broadcastControl}
                     name="userId"
                     rules={{
-                      validate: (value) => (targetType !== 'user' || value) || 'Wybierz użytkownika'
+                      validate: (value) => {
+                        if (targetType !== 'user') {
+                          return true;
+                        }
+                        return value ? true : 'Wybierz użytkownika';
+                      }
                     }}
                     render={({ field }) => {
                       const selectedOption =
@@ -446,14 +480,40 @@ export default function MessagesPage() {
               />
             </label>
             <div className="space-y-2">
-              <label className="block text-sm text-slate-700">
+              <label className="block text-sm text-slate-700" htmlFor="broadcast-attachment">
                 Załącznik (opcjonalnie)
-                <input
-                  type="file"
-                  className="mt-1 w-full text-sm"
-                  {...registerBroadcast('attachment')}
-                />
               </label>
+              <div className="mt-1 flex items-center gap-3">
+                <input
+                  id="broadcast-attachment"
+                  key={broadcastAttachmentInputKey}
+                  type="file"
+                  className="w-full text-sm"
+                  onChange={(event) => {
+                    const file = event.target.files?.item(0) ?? null;
+                    setBroadcastAttachment(file);
+                    setBroadcastAttachmentName(file ? file.name : null);
+                  }}
+                />
+                {broadcastAttachmentName && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      setBroadcastAttachmentName(null);
+                      setBroadcastAttachment(null);
+                      setBroadcastAttachmentInputKey((key) => key + 1);
+                    }}
+                  >
+                    Usuń
+                  </Button>
+                )}
+              </div>
+              {broadcastAttachmentName && (
+                <p className="text-xs text-slate-500">Wybrano: {broadcastAttachmentName}</p>
+              )}
               <p className="text-xs text-slate-500">
                 Obsługiwane są pojedyncze pliki, które zostaną dołączone do wiadomości.
               </p>
