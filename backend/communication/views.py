@@ -557,6 +557,8 @@ class MessageThreadViewSet(viewsets.ModelViewSet):
             action="thread.broadcast",
             metadata={"thread_id": thread.pk, "message_id": message.pk},
         )
+        # Re-fetch the thread with all related objects to ensure proper serialization
+        thread = self.get_queryset().get(pk=thread.pk)
         response = self.get_serializer(thread)
         return Response(response.data, status=status.HTTP_201_CREATED)
 

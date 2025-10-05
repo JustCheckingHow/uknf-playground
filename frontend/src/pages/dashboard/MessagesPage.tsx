@@ -233,6 +233,11 @@ export default function MessagesPage() {
     },
     onSuccess: (thread) => {
       setSelectedThreadId(thread.id);
+      // Clear filters to ensure the new thread is visible
+      setGroupFilter('all');
+      setRecipientFilter('all');
+      setDateFrom('');
+      setDateTo('');
       queryClient.invalidateQueries({ queryKey: ['threads'] });
       queryClient.setQueryData<Message[]>(['thread', thread.id], thread.messages);
       resetBroadcastForm({
