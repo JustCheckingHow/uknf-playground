@@ -32,6 +32,10 @@ class LibraryDocumentUploadSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         uploaded_file = validated_data.pop("file")
         validated_data.setdefault("description", "")
+        request = self.context.get("request")
+        uploaded_by = None
+        if request and hasattr(request, "user") and request.user.is_authenticated:
+            uploaded_by = request.user
 
         if not validated_data.get("title"):
             filename = Path(uploaded_file.name).stem or uploaded_file.name
@@ -41,7 +45,11 @@ class LibraryDocumentUploadSerializer(serializers.ModelSerializer):
         content_parts = [validated_data.get("description", "").strip(), indexed_text.strip()]
         combined_content = "\n\n".join(part for part in content_parts if part)
 
-        document = LibraryDocument.objects.create(file=uploaded_file, **validated_data)
+        document = LibraryDocument.objects.create(
+            file=uploaded_file,
+            uploaded_by=uploaded_by,
+            **validated_data,
+        )
 
         update_fields: list[str] = []
         if combined_content:

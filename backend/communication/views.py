@@ -18,6 +18,8 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
+from library.utils import filter_documents_for_user
+
 from accounts.models import EntityMembership, RegulatedEntity
 from accounts.permissions import IsEntityMember, IsInternalUser
 from administration.models import AuditLogEntry
@@ -233,6 +235,7 @@ class ReportViewSet(viewsets.ModelViewSet):
                     file=storage_path,
                     content=summary,
                     is_mandatory=False,
+                    uploaded_by=request.user,
                 )
         except Exception:
             raise
@@ -601,6 +604,10 @@ class LibraryDocumentViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     serializer_class = LibraryDocumentSerializer
     permission_classes = [AllowAny]
     filterset_fields = ["category", "is_mandatory"]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        return filter_documents_for_user(queryset, getattr(self.request, "user", None))
 
 
 class FaqViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):

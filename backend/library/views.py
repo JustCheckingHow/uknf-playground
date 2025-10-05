@@ -11,19 +11,26 @@ from rest_framework.views import APIView
 
 from communication.models import FaqEntry, LibraryDocument
 from communication.serializers import FaqEntrySerializer, LibraryDocumentSerializer
+from accounts.permissions import IsInternalUser
+
 from .serializers import LibraryDocumentUploadSerializer, LibraryQuestionSerializer
 from .services import generate_library_answer
+from .utils import filter_documents_for_user
 
 
 logger = logging.getLogger(__name__)
 
 
 class LibraryOverviewView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
+        documents_qs = filter_documents_for_user(
+            LibraryDocument.objects.all().order_by("-published_at"),
+            request.user,
+        )
         documents = LibraryDocumentSerializer(
-            LibraryDocument.objects.all().order_by("-published_at")[:20],
+            documents_qs[:20],
             many=True,
             context={"request": request},
         )
@@ -35,11 +42,14 @@ class LibraryOverviewView(APIView):
 
 
 class LibrarySearchView(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
         query = request.query_params.get("q", "").lower()
-        documents_qs = LibraryDocument.objects.all()
+        documents_qs = filter_documents_for_user(
+            LibraryDocument.objects.all(),
+            request.user,
+        )
         if query:
             documents_qs = documents_qs.filter(
                 Q(title__icontains=query)
@@ -60,7 +70,7 @@ class LibrarySearchView(APIView):
 
 
 class LibraryDocumentUploadView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInternalUser]
     parser_classes = [MultiPartParser, FormParser]
 
     def post(self, request, *args, **kwargs):
@@ -72,7 +82,7 @@ class LibraryDocumentUploadView(APIView):
 
 
 class LibraryDocumentDetailView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsInternalUser]
 
     def delete(self, request, document_id: int, *args, **kwargs):
         try:
@@ -104,7 +114,7 @@ class LibraryQuestionAnswerView(APIView):
         question = serializer.validated_data["question"]
 
         try:
-            answer, sources = generate_library_answer(question)
+            answer, sources = generate_library_answer(question, request.user)
         except RuntimeError as exc:
             logger.warning("Library QA unavailable: %s", exc)
             return Response(

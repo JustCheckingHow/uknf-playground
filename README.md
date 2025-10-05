@@ -4,6 +4,17 @@
 Demonstration implementation of the UKNF communication and reporting platform. The stack aligns with the architectural guidelines: a Django REST backend providing the secure API surface and a React 18 frontend (Vite) delivering the operator UI. The solution covers the communication, authentication and administration modules described in `REQUIREMENTS.md` and `PROJECT_DETAILS.md`.
 
 
+## Feature Highlights
+
+- Authentication & onboarding for external entities with activation flows, multi-entity session context switching, directory search and targeted user groups.
+- Access request orchestration including per-entity lines, granular permission decisions, threaded discussions, attachments and an auditable history trail.
+- Secure messaging workspace with entity-scoped threads, internal-only notes, broadcast campaigns (by user group or individual recipients) and file attachments.
+- Reporting lifecycle that ingests Excel workbooks, auto-creates missing entity records, validates domain rules, records timelines and archives accepted filings in the regulatory library.
+- Supervisory case handling with status timelines, assignee tracking, due dates plus regulatory announcements featuring acknowledgement rates and expiry windows.
+- Regulatory knowledge base with curated documents, full-text search, FAQ feeds and an optional AI assistant that answers questions using OpenAI models and embedded document snippets.
+- Administration surface exposing password policy management, data retention rules, maintenance calendars, comprehensive audit logs and configurable notification preferences.
+
+
 ## Test Admin login 
 
 ```bash 
@@ -20,6 +31,38 @@ Admin1234!
 - `dev-docker-compose.yml` – Hot-reload oriented setup for local development.
 - `REQUIREMENTS.md`, `PROJECT_DETAILS.md` – Source specifications.
 - `DETAILS_UKNF_#Prompt2Code2.pdf` – Original supporting material.
+
+## System Architecture
+
+```mermaid
+flowchart LR
+    UserBrowsers["Users\n(Regulated entities & UKNF staff)"]
+    Frontend["React SPA\n(Vite, React Query, Tailwind)"]
+    Backend["Django REST API\n(DRF, modular apps)"]
+    Accounts["Accounts app\nAuth, onboarding, directory"]
+    Communication["Communication app\nReports, cases, messaging"]
+    Library["Library app\nDocuments, FAQ, AI QA"]
+    Administration["Administration app\nPolicies, audit, maintenance"]
+    Validator["Excel validator &\nreport ingestion"]
+    DB[(PostgreSQL\nPersistent data)]
+    Storage["File storage\n(Django storage backend)"]
+    OpenAI[(OpenAI APIs\noptional)]
+
+    UserBrowsers --> Frontend
+    Frontend -->|HTTPS /api| Backend
+    Backend --> Accounts
+    Backend --> Communication
+    Backend --> Library
+    Backend --> Administration
+    Communication --> Validator
+    Accounts --> DB
+    Communication --> DB
+    Library --> DB
+    Administration --> DB
+    Communication --> Storage
+    Library --> Storage
+    Library -->|Embeddings & QA| OpenAI
+```
 
 ## Getting Started
 
@@ -79,6 +122,8 @@ API base URL (docker compose): `http://localhost:8123/api`
 - `POST /library/documents` / `DELETE /library/documents/{id}` – authenticated upload and removal of library artefacts.
 - `POST /library/qa` – question-answering endpoint returning generated answers plus cited sources.
 
+Set `OPENAI_API_KEY` (and optionally `OPENAI_MODEL` / `OPENAI_EMBEDDING_MODEL`) to enable semantic search embeddings and the AI assistant used by `/library/qa`. Without these variables the endpoint gracefully returns `503`.
+
 **Administration (internal)**
 - `GET/PUT /admin/password-policy` – password policy configuration (system scope).
 - `GET /admin/audit-logs` – searchable audit trail (internal-only).
@@ -124,9 +169,9 @@ python manage.py test
 - Entity-scoped permissions with internal/external separation
 - Comprehensive audit logging (`AuditLogEntry.record`) for sensitive actions
 - Configurable password policy and notification preferences
-- Report lifecycle states that mirror UKNF validation flow (draft → submitted → validated, etc.)
-- Secure messaging with internal notes, announcements with acknowledgement tracking
-- Library & FAQ modules exposing regulatory artefacts
+- Report lifecycle states that mirror UKNF validation flow (draft → submitted → validated, etc.) paired with Excel workbook validation and automatic archiving of accepted filings.
+- Secure messaging with internal notes, recipient targeting and announcements backed by acknowledgement tracking.
+- Library & FAQ modules exposing regulatory artefacts with per-user access filters plus optional embeddings-backed AI answers.
 - CORS, security headers and GDPR-friendly data retention models
 
 ## Accessibility & UX Highlights

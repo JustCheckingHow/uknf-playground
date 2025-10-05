@@ -11,6 +11,7 @@ import { Card } from '@/components/ui/Card';
 import { apiClient } from '@/lib/api';
 import type { FaqEntry, LibraryDocument, LibraryQaResponse } from '@/types';
 import { select2Styles, type SelectOption } from '@/components/ui/select2Styles';
+import { useAuth } from '@/hooks/useAuth';
 
 const DOCUMENT_CATEGORY_OPTIONS: SelectOption[] = [
   { value: 'reporting', label: 'Raportowanie' },
@@ -65,9 +66,11 @@ function resolveErrorMessage(error: unknown) {
 
 export default function LibraryPage() {
   const { data } = useLibrary();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const documents = data?.documents ?? [];
   const faq = data?.faq ?? [];
+  const isInternalUser = user?.is_internal ?? false;
 
   const uploadFormRef = useRef<HTMLFormElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -172,6 +175,9 @@ export default function LibraryPage() {
   };
 
   const handleDeleteDocument = (document: LibraryDocument) => {
+    if (!isInternalUser) {
+      return;
+    }
     const confirmationTitle = document.title?.trim() || 'ten dokument';
     if (!window.confirm(`Czy na pewno chcesz usunąć dokument "${confirmationTitle}"?`)) {
       return;
@@ -197,128 +203,130 @@ export default function LibraryPage() {
       </Card>
 
       <div className="grid gap-6">
-        <Card className="space-y-4">
-          <div className="flex items-center gap-2">
-            <Upload size={18} className="text-primary" />
-            <h2 className="text-base font-semibold text-slate-800">Dodaj dokument do biblioteki</h2>
-          </div>
-          <form ref={uploadFormRef} onSubmit={handleUploadSubmit} className="space-y-4">
-            <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-              <div className="grid gap-4">
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  <div className="flex flex-col gap-1 text-sm">
-                    <label htmlFor="library-document-category" className="font-medium text-slate-700">
-                      Kategoria
-                    </label>
-                    <Select<SelectOption>
-                      inputId="library-document-category"
-                      className="mt-1 w-full"
-                      classNamePrefix="select2"
-                      options={DOCUMENT_CATEGORY_OPTIONS}
-                      value={
-                        DOCUMENT_CATEGORY_OPTIONS.find((option) => option.value === uploadForm.category) ?? null
-                      }
-                      isSearchable
-                      styles={select2Styles}
-                      noOptionsMessage={() => 'Brak wyników'}
-                      onChange={(option) => {
-                        if (option) {
-                          setUploadForm((prev) => ({ ...prev, category: option.value }));
+        {isInternalUser && (
+          <Card className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Upload size={18} className="text-primary" />
+              <h2 className="text-base font-semibold text-slate-800">Dodaj dokument do biblioteki</h2>
+            </div>
+            <form ref={uploadFormRef} onSubmit={handleUploadSubmit} className="space-y-4">
+              <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+                <div className="grid gap-4">
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="flex flex-col gap-1 text-sm">
+                      <label htmlFor="library-document-category" className="font-medium text-slate-700">
+                        Kategoria
+                      </label>
+                      <Select<SelectOption>
+                        inputId="library-document-category"
+                        className="mt-1 w-full"
+                        classNamePrefix="select2"
+                        options={DOCUMENT_CATEGORY_OPTIONS}
+                        value={
+                          DOCUMENT_CATEGORY_OPTIONS.find((option) => option.value === uploadForm.category) ?? null
                         }
-                      }}
-                    />
+                        isSearchable
+                        styles={select2Styles}
+                        noOptionsMessage={() => 'Brak wyników'}
+                        onChange={(option) => {
+                          if (option) {
+                            setUploadForm((prev) => ({ ...prev, category: option.value }));
+                          }
+                        }}
+                      />
+                    </div>
+                    <label className="flex flex-col gap-1 text-sm">
+                      <span className="font-medium text-slate-700">Wersja</span>
+                      <input
+                        type="text"
+                        value={uploadForm.version}
+                        onChange={(event) => setUploadForm((prev) => ({ ...prev, version: event.target.value }))}
+                        className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none"
+                        placeholder="np. 1.0"
+                      />
+                    </label>
+                    <label className="flex items-center gap-2 text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={uploadForm.is_mandatory}
+                        onChange={(event) => setUploadForm((prev) => ({ ...prev, is_mandatory: event.target.checked }))}
+                        className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                      />
+                      <span>Dokument obowiązkowy</span>
+                    </label>
                   </div>
                   <label className="flex flex-col gap-1 text-sm">
-                    <span className="font-medium text-slate-700">Wersja</span>
+                    <span className="font-medium text-slate-700">Tytuł</span>
                     <input
                       type="text"
-                      value={uploadForm.version}
-                      onChange={(event) => setUploadForm((prev) => ({ ...prev, version: event.target.value }))}
+                      value={uploadForm.title}
+                      onChange={(event) => setUploadForm((prev) => ({ ...prev, title: event.target.value }))}
                       className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none"
-                      placeholder="np. 1.0"
+                      placeholder="np. Instrukcja raportowania"
                     />
+                    <span className="text-xs text-slate-500">Pozostaw puste, aby użyć nazwy pliku.</span>
                   </label>
-                  <label className="flex items-center gap-2 text-sm text-slate-700">
-                    <input
-                      type="checkbox"
-                      checked={uploadForm.is_mandatory}
-                      onChange={(event) => setUploadForm((prev) => ({ ...prev, is_mandatory: event.target.checked }))}
-                      className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium text-slate-700">Opis</span>
+                    <textarea
+                      rows={3}
+                      value={uploadForm.description}
+                      onChange={(event) => setUploadForm((prev) => ({ ...prev, description: event.target.value }))}
+                      className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none"
+                      placeholder="Krótki opis, czego dotyczy dokument."
                     />
-                    <span>Dokument obowiązkowy</span>
                   </label>
                 </div>
-                <label className="flex flex-col gap-1 text-sm">
-                  <span className="font-medium text-slate-700">Tytuł</span>
+                <div className="grid gap-2 text-sm">
+                  <span className="font-medium text-slate-700">Plik dokumentu</span>
                   <input
-                    type="text"
-                    value={uploadForm.title}
-                    onChange={(event) => setUploadForm((prev) => ({ ...prev, title: event.target.value }))}
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none"
-                    placeholder="np. Instrukcja raportowania"
+                    ref={fileInputRef}
+                    type="file"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] ?? null;
+                      setSelectedFile(file);
+                      setUploadValidationError(null);
+                      if (file) {
+                        const fallbackTitle = file.name.replace(/\.[^/.]+$/, '') || file.name;
+                        setUploadForm((prev) => {
+                          if (prev.title.trim()) {
+                            return prev;
+                          }
+                          return { ...prev, title: fallbackTitle };
+                        });
+                      }
+                    }}
+                    className="sr-only"
+                    accept=".pdf,.doc,.docx,.txt,.md,.rtf"
                   />
-                  <span className="text-xs text-slate-500">Pozostaw puste, aby użyć nazwy pliku.</span>
-                </label>
-                <label className="flex flex-col gap-1 text-sm">
-                  <span className="font-medium text-slate-700">Opis</span>
-                  <textarea
-                    rows={3}
-                    value={uploadForm.description}
-                    onChange={(event) => setUploadForm((prev) => ({ ...prev, description: event.target.value }))}
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-900 focus:border-primary focus:outline-none"
-                    placeholder="Krótki opis, czego dotyczy dokument."
-                  />
-                </label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-start gap-2 border-dashed"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    <Upload size={16} aria-hidden />
+                    <span className="truncate text-left">
+                      {selectedFile ? selectedFile.name : 'Wybierz plik z dysku'}
+                    </span>
+                  </Button>
+                  <p className="text-xs text-slate-500">Akceptowane formaty: PDF, DOC, DOCX, TXT, MD, RTF.</p>
+                </div>
               </div>
-              <div className="grid gap-2 text-sm">
-                <span className="font-medium text-slate-700">Plik dokumentu</span>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0] ?? null;
-                    setSelectedFile(file);
-                    setUploadValidationError(null);
-                    if (file) {
-                      const fallbackTitle = file.name.replace(/\.[^/.]+$/, '') || file.name;
-                      setUploadForm((prev) => {
-                        if (prev.title.trim()) {
-                          return prev;
-                        }
-                        return { ...prev, title: fallbackTitle };
-                      });
-                    }
-                  }}
-                  className="sr-only"
-                  accept=".pdf,.doc,.docx,.txt,.md,.rtf"
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full justify-start gap-2 border-dashed"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Upload size={16} aria-hidden />
-                  <span className="truncate text-left">
-                    {selectedFile ? selectedFile.name : 'Wybierz plik z dysku'}
-                  </span>
+              {(uploadValidationError || uploadError) && (
+                <p className="flex items-center gap-2 text-sm text-red-600">
+                  <AlertCircle size={16} aria-hidden />
+                  {uploadValidationError ?? uploadError}
+                </p>
+              )}
+              <div className="flex justify-end">
+                <Button type="submit" isLoading={uploadMutation.isPending} className="w-full justify-center md:w-auto">
+                  Prześlij dokument
                 </Button>
-                <p className="text-xs text-slate-500">Akceptowane formaty: PDF, DOC, DOCX, TXT, MD, RTF.</p>
               </div>
-            </div>
-            {(uploadValidationError || uploadError) && (
-              <p className="flex items-center gap-2 text-sm text-red-600">
-                <AlertCircle size={16} aria-hidden />
-                {uploadValidationError ?? uploadError}
-              </p>
-            )}
-            <div className="flex justify-end">
-              <Button type="submit" isLoading={uploadMutation.isPending} className="w-full justify-center md:w-auto">
-                Prześlij dokument
-              </Button>
-            </div>
-          </form>
-        </Card>
+            </form>
+          </Card>
+        )}
 
         <Card className="space-y-4">
           <div className="flex items-center gap-2">
@@ -419,18 +427,20 @@ export default function LibraryPage() {
                       {document.is_mandatory && <span className="font-semibold text-red-600">WYMAGANY</span>}
                     </div>
                   </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="gap-1 text-red-600 hover:bg-red-50 hover:text-red-700"
-                    onClick={() => handleDeleteDocument(document)}
-                    isLoading={isDeletingThisDocument}
-                    disabled={deletingDocumentId !== null && deletingDocumentId !== document.id}
-                  >
-                    <Trash size={14} aria-hidden />
-                    Usuń
-                  </Button>
+                  {isInternalUser && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="gap-1 text-red-600 hover:bg-red-50 hover:text-red-700"
+                      onClick={() => handleDeleteDocument(document)}
+                      isLoading={isDeletingThisDocument}
+                      disabled={deletingDocumentId !== null && deletingDocumentId !== document.id}
+                    >
+                      <Trash size={14} aria-hidden />
+                      Usuń
+                    </Button>
+                  )}
                 </div>
                 <h3 className="text-base font-semibold text-slate-900">{documentTitle}</h3>
                 {documentDescription ? (
