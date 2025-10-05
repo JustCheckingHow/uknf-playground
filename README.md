@@ -10,6 +10,22 @@ Demonstration implementation of the UKNF communication and reporting platform. T
 See interesting charts as well in `charts/` folder
 
 
+## Quickstart
+
+### tldr;
+Locally:
+
+```bash
+docker compose -f docker-compose.yml up --build
+```
+
+Then, `localhost:3000` is the frontend address.
+
+Or, just access with the domain: https://uknf.justcheckinghow.com 
+
+
+
+
 ## Feature Highlights
 
 - Authentication & onboarding for external entities with activation flows, multi-entity session context switching, directory search and targeted user groups.
