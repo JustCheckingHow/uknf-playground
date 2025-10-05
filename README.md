@@ -3,7 +3,7 @@
 ## Quick Links
 - [OpenAPI specification](openapi.yaml)
 - [Prompt analysis report](RAPORT_ANALIZA_LOGOW_CODEX.md)
-- [Prompt details dossier](DETAILS_UKNF_#Prompt2Code2.pdf)
+- [Prompt details dossier](prompts.md)
 
 Demonstration implementation of the UKNF communication and reporting platform. The stack aligns with the architectural guidelines: a Django REST backend providing the secure API surface and a React 18 frontend (Vite) delivering the operator UI. The solution covers the communication, authentication and administration modules described in `REQUIREMENTS.md` and `PROJECT_DETAILS.md`.
 
