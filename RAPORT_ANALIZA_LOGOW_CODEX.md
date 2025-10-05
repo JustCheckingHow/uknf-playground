@@ -1,5 +1,17 @@
 # Raport Analizy Logów Codex - Dni 04-05 Października 2025
 
+## Tipy 
+
+1. Regularna aktualizacja README.md -- model ma wtedy łatwe odniesienie do obecnego stanu
+   1. Działa to jak "git commit" tylko dla LLMa
+2. Początkowa dokładna specyfikacja projektu -- duży, dokładny opis, rozbicie na zadania
+3. Iteracja z atomizacją zadań 
+   1. Jeden task == szczegółowa grupa plików + konkretna funkcjonalność
+   2. W ten sposób możemy zlecać kilka zadań naraz, bez konfliktów
+4. W przypadku zmian wymagań można:
+   1. Ręcznie specyfikować konkretne zmiany, dokładnie wskazywać obszar zmian
+   2. Koniecznie pamiętać o ręcznej aktualizacji README.md! (Jeżeli korzystamy)
+
 ## Podsumowanie Wykonawcze
 
 **Okres analizy:** 4-5 października 2025  

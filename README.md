@@ -1,5 +1,9 @@
 # UKNF Communication Platform (Django + React)
 
+## Quick Links
+- [OpenAPI specification](openapi.yaml)
+- [Prompt analysis report](RAPORT_ANALIZA_LOGOW_CODEX.md)
+- [Prompt details dossier](DETAILS_UKNF_#Prompt2Code2.pdf)
 
 Demonstration implementation of the UKNF communication and reporting platform. The stack aligns with the architectural guidelines: a Django REST backend providing the secure API surface and a React 18 frontend (Vite) delivering the operator UI. The solution covers the communication, authentication and administration modules described in `REQUIREMENTS.md` and `PROJECT_DETAILS.md`.
 
@@ -109,9 +113,9 @@ API base URL (docker compose): `http://localhost:8123/api`
 - `GET/POST /auth/user-groups` – internal user groups for broadcast targeting (system admins only).
 
 **Communication**
-- `GET/POST /communication/reports` – report submissions and review (internal reviewers can invoke `POST /communication/reports/{id}/status`).
-- `GET/POST /communication/cases` – supervisory case management (create/update/delete limited to UKNF staff).
-- `GET/POST /communication/messages` – secure threads with `GET/POST /communication/messages/{id}/messages` for the conversation log and `POST /communication/messages/broadcast` for internal broadcasts.
+- `GET/POST /communication/reports` – report submissions and review with upload endpoints (`POST /communication/reports/upload_new`, `POST /communication/reports/{id}/upload`, `POST /communication/reports/{id}/submit`) and status transitions (`POST /communication/reports/{id}/status`).
+- `GET/POST /communication/cases` – supervisory case management with timeline tracking (create/update/delete limited to UKNF staff).
+- `GET/POST /communication/messages` – secure threads with filters (`group`, `target_type`, `updated_after/before`), per-thread conversations via `GET/POST /communication/messages/{id}/messages` and broadcast campaigns (`POST /communication/messages/broadcast`).
 - `GET/POST /communication/announcements` – regulatory announcements with `POST /communication/announcements/{id}/acknowledge` for receipt tracking.
 - `GET /communication/library` – published regulatory resources.
 - `GET /communication/faq` – active FAQ entries.

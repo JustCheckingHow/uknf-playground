@@ -1,0 +1,3219 @@
+openapi: 3.0.3
+info:
+  title: UKNF Communication Platform API
+  version: 1.0.0
+  description: |
+    OpenAPI specification for the UKNF Communication Platform backend.
+    The API is built with Django REST Framework and is organised into modules for
+    authentication, communication, administration and the document library.
+servers:
+  - url: /api
+    description: Base API prefix served by the Django application
+security:
+  - TokenAuth: []
+tags:
+  - name: Health
+  - name: Authentication
+  - name: Accounts
+  - name: Access Requests
+  - name: Communication
+  - name: Administration
+  - name: Library
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health probe
+      description: Returns a simple health indicator without requiring authentication.
+      security: []
+      responses:
+        '200':
+          description: API is reachable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+  /auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register a new external user
+      description: Creates a pending account for an external entity administrator or submitter and sends an activation e-mail.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: Registration accepted and activation link sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+  /auth/activate:
+    post:
+      tags: [Authentication]
+      summary: Activate newly registered account
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ActivateAccountRequest'
+      responses:
+        '200':
+          description: Account activated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  detail:
+                    type: string
+                    example: Konto zostało aktywowane.
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Obtain token authentication credentials
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      summary: Revoke token and logout current session
+      responses:
+        '204':
+          description: Token revoked, no content
+  /auth/profile:
+    get:
+      tags: [Authentication]
+      summary: Retrieve authenticated user profile with memberships
+      responses:
+        '200':
+          description: Profile information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProfileResponse'
+  /auth/session:
+    post:
+      tags: [Authentication]
+      summary: Set acting entity for authenticated user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserSessionUpdateRequest'
+      responses:
+        '200':
+          description: Updated session context
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserSessionContext'
+  /auth/preferences:
+    get:
+      tags: [Authentication]
+      summary: Get notification preferences
+      responses:
+        '200':
+          description: Current notification preferences
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPreference'
+    put:
+      tags: [Authentication]
+      summary: Update notification preferences
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NotificationPreferenceUpdateRequest'
+      responses:
+        '200':
+          description: Updated preferences
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPreference'
+  /auth/roles:
+    get:
+      tags: [Authentication]
+      summary: List available user roles
+      responses:
+        '200':
+          description: Available application roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RoleDisplay'
+  /auth/entities/:
+    get:
+      tags: [Accounts]
+      summary: List regulated entities
+      parameters:
+        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: '#/components/parameters/OrderingQuery'
+        - in: query
+          name: sector
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            $ref: '#/components/schemas/RegulatedEntityStatus'
+        - in: query
+          name: city
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paged list of entities
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRegulatedEntityList'
+    post:
+      tags: [Accounts]
+      summary: Create a regulated entity (internal users only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegulatedEntityCreateRequest'
+      responses:
+        '201':
+          description: Entity created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegulatedEntity'
+  /auth/entities/{entityId}/:
+    parameters:
+      - $ref: '#/components/parameters/EntityId'
+    get:
+      tags: [Accounts]
+      summary: Retrieve a regulated entity
+      responses:
+        '200':
+          description: Entity details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegulatedEntity'
+    put:
+      tags: [Accounts]
+      summary: Replace regulated entity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegulatedEntityUpdateRequest'
+      responses:
+        '200':
+          description: Updated entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegulatedEntity'
+    patch:
+      tags: [Accounts]
+      summary: Partially update regulated entity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegulatedEntityPartialUpdateRequest'
+      responses:
+        '200':
+          description: Updated entity
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegulatedEntity'
+    delete:
+      tags: [Accounts]
+      summary: Delete entity (internal users only)
+      responses:
+        '204':
+          description: Entity removed
+  /auth/entities/{entityId}/verify/:
+    post:
+      tags: [Accounts]
+      summary: Mark entity as verified (internal users)
+      parameters:
+        - $ref: '#/components/parameters/EntityId'
+      responses:
+        '200':
+          description: Verification timestamp updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegulatedEntity'
+  /auth/memberships/:
+    get:
+      tags: [Accounts]
+      summary: List memberships for current scope
+      parameters:
+        - in: query
+          name: entity
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Memberships
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMembershipList'
+    post:
+      tags: [Accounts]
+      summary: Create membership for an entity
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntityMembershipCreateRequest'
+      responses:
+        '201':
+          description: Membership created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityMembership'
+  /auth/memberships/{membershipId}/:
+    parameters:
+      - $ref: '#/components/parameters/MembershipId'
+    get:
+      tags: [Accounts]
+      summary: Retrieve membership
+      responses:
+        '200':
+          description: Membership details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityMembership'
+    put:
+      tags: [Accounts]
+      summary: Replace membership
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntityMembershipUpdateRequest'
+      responses:
+        '200':
+          description: Membership updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityMembership'
+    patch:
+      tags: [Accounts]
+      summary: Partially update membership
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntityMembershipPartialUpdateRequest'
+      responses:
+        '200':
+          description: Membership updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityMembership'
+    delete:
+      tags: [Accounts]
+      summary: Delete membership
+      responses:
+        '204':
+          description: Membership removed
+  /auth/access-requests/:
+    get:
+      tags: [Access Requests]
+      summary: List access requests visible to the caller
+      parameters:
+        - in: query
+          name: filter
+          schema:
+            type: string
+            description: Optional UKNF-specific filter key
+      responses:
+        '200':
+          description: Paged access requests
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAccessRequestList'
+  /auth/access-requests/{requestId}/:
+    parameters:
+      - $ref: '#/components/parameters/AccessRequestId'
+    get:
+      tags: [Access Requests]
+      summary: Retrieve access request
+      responses:
+        '200':
+          description: Access request details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
+    put:
+      tags: [Access Requests]
+      summary: Update access request content
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessRequestUpdateRequest'
+      responses:
+        '200':
+          description: Access request updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
+    patch:
+      tags: [Access Requests]
+      summary: Partially update access request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessRequestUpdateRequest'
+      responses:
+        '200':
+          description: Access request updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
+  /auth/access-requests/my-active/:
+    get:
+      tags: [Access Requests]
+      summary: Retrieve or initialise current user's draft access request
+      responses:
+        '200':
+          description: Draft or latest access request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
+  /auth/access-requests/{requestId}/submit/:
+    post:
+      tags: [Access Requests]
+      summary: Submit an access request for review
+      parameters:
+        - $ref: '#/components/parameters/AccessRequestId'
+      responses:
+        '200':
+          description: Submitted access request snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
+  /auth/access-requests/{requestId}/return/:
+    post:
+      tags: [Access Requests]
+      summary: Return an access request to requester with required changes (UKNF only)
+      parameters:
+        - $ref: '#/components/parameters/AccessRequestId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessRequestReturnRequest'
+      responses:
+        '200':
+          description: Updated access request state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
+  /auth/access-requests/{requestId}/lines/{lineId}/approve/:
+    post:
+      tags: [Access Requests]
+      summary: Approve a single access request line
+      parameters:
+        - $ref: '#/components/parameters/AccessRequestId'
+        - $ref: '#/components/parameters/AccessRequestLineId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessRequestDecisionRequest'
+      responses:
+        '200':
+          description: Updated access request snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
+  /auth/access-requests/{requestId}/lines/{lineId}/block/:
+    post:
+      tags: [Access Requests]
+      summary: Block a single access request line
+      parameters:
+        - $ref: '#/components/parameters/AccessRequestId'
+        - $ref: '#/components/parameters/AccessRequestLineId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccessRequestDecisionRequest'
+      responses:
+        '200':
+          description: Updated access request snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequest'
+  /auth/access-requests/{requestId}/messages/:
+    parameters:
+      - $ref: '#/components/parameters/AccessRequestId'
+    get:
+      tags: [Access Requests]
+      summary: List discussion messages for an access request
+      responses:
+        '200':
+          description: Request messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AccessRequestMessage'
+    post:
+      tags: [Access Requests]
+      summary: Post a new message to an access request
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AccessRequestMessagePostRequest'
+      responses:
+        '201':
+          description: Message created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequestMessage'
+  /auth/access-requests/{requestId}/attachments/:
+    post:
+      tags: [Access Requests]
+      summary: Upload supporting attachment for an access request
+      parameters:
+        - $ref: '#/components/parameters/AccessRequestId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/AccessRequestAttachmentUploadRequest'
+      responses:
+        '201':
+          description: Attachment stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccessRequestAttachment'
+  /auth/contacts/:
+    get:
+      tags: [Accounts]
+      summary: List contact submissions (internal)
+      responses:
+        '200':
+          description: Contact submissions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedContactSubmissionList'
+    post:
+      tags: [Accounts]
+      summary: Submit a contact form message
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContactSubmissionCreateRequest'
+      responses:
+        '201':
+          description: Submission stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactSubmission'
+  /auth/users/:
+    get:
+      tags: [Accounts]
+      summary: Internal directory of users
+      parameters:
+        - in: query
+          name: role
+          schema:
+            type: string
+        - in: query
+          name: is_active
+          schema:
+            type: boolean
+        - in: query
+          name: user_type
+          schema:
+            type: string
+        - in: query
+          name: non_admin
+          schema:
+            type: boolean
+        - $ref: '#/components/parameters/SearchQuery'
+      responses:
+        '200':
+          description: Paged users
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserList'
+  /auth/users/{userId}/:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      tags: [Accounts]
+      summary: Retrieve user profile (internal)
+      responses:
+        '200':
+          description: User data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+  /auth/user-groups/:
+    get:
+      tags: [Accounts]
+      summary: List custom user groups
+      responses:
+        '200':
+          description: Paged user groups
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserGroupList'
+    post:
+      tags: [Accounts]
+      summary: Create user group (system administrators)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserGroupCreateRequest'
+      responses:
+        '201':
+          description: Group created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserGroup'
+  /auth/user-groups/{groupId}/:
+    parameters:
+      - $ref: '#/components/parameters/UserGroupId'
+    get:
+      tags: [Accounts]
+      summary: Retrieve user group
+      responses:
+        '200':
+          description: Group details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserGroup'
+    put:
+      tags: [Accounts]
+      summary: Replace user group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserGroupUpdateRequest'
+      responses:
+        '200':
+          description: Group updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserGroup'
+    patch:
+      tags: [Accounts]
+      summary: Partially update user group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserGroupPartialUpdateRequest'
+      responses:
+        '200':
+          description: Group updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserGroup'
+    delete:
+      tags: [Accounts]
+      summary: Delete user group
+      responses:
+        '204':
+          description: Group removed
+  /communication/reports/:
+    get:
+      tags: [Communication]
+      summary: List reports accessible to caller
+      parameters:
+        - in: query
+          name: entity
+          schema:
+            type: integer
+        - in: query
+          name: status
+          schema:
+            $ref: '#/components/schemas/ReportStatus'
+        - in: query
+          name: report_type
+          schema:
+            type: string
+        - $ref: '#/components/parameters/OrderingQuery'
+        - $ref: '#/components/parameters/SearchQuery'
+      responses:
+        '200':
+          description: Paged reports
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedReportList'
+    post:
+      tags: [Communication]
+      summary: Create a new report record
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportCreateRequest'
+      responses:
+        '201':
+          description: Report created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+  /communication/reports/{reportId}/:
+    parameters:
+      - $ref: '#/components/parameters/ReportId'
+    get:
+      tags: [Communication]
+      summary: Retrieve report
+      responses:
+        '200':
+          description: Report details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+    put:
+      tags: [Communication]
+      summary: Replace report
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportUpdateRequest'
+      responses:
+        '200':
+          description: Report updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+    patch:
+      tags: [Communication]
+      summary: Partially update report
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportPartialUpdateRequest'
+      responses:
+        '200':
+          description: Report updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+    delete:
+      tags: [Communication]
+      summary: Delete report (internal)
+      responses:
+        '204':
+          description: Report deleted
+  /communication/reports/{reportId}/status/:
+    post:
+      tags: [Communication]
+      summary: Update report status (internal)
+      parameters:
+        - $ref: '#/components/parameters/ReportId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReportStatusUpdateRequest'
+      responses:
+        '200':
+          description: Updated report snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+  /communication/reports/{reportId}/submit/:
+    post:
+      tags: [Communication]
+      summary: Mark report as submitted by entity member
+      parameters:
+        - $ref: '#/components/parameters/ReportId'
+      responses:
+        '200':
+          description: Report submitted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+  /communication/reports/{reportId}/upload/:
+    post:
+      tags: [Communication]
+      summary: Upload workbook for an existing report
+      parameters:
+        - $ref: '#/components/parameters/ReportId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReportUploadRequest'
+      responses:
+        '200':
+          description: Report updated after validation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+  /communication/reports/upload_new/:
+    post:
+      tags: [Communication]
+      summary: Upload a new workbook and auto-create report record
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ReportUploadRequest'
+      responses:
+        '201':
+          description: Report created from upload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Report'
+  /communication/cases/:
+    get:
+      tags: [Communication]
+      summary: List cases assigned to user or entity
+      parameters:
+        - in: query
+          name: status
+          schema:
+            $ref: '#/components/schemas/CaseStatus'
+        - in: query
+          name: entity
+          schema:
+            type: integer
+        - $ref: '#/components/parameters/SearchQuery'
+      responses:
+        '200':
+          description: Paged cases
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedCaseList'
+    post:
+      tags: [Communication]
+      summary: Create case (internal)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CaseCreateRequest'
+      responses:
+        '201':
+          description: Case created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Case'
+  /communication/cases/{caseId}/:
+    parameters:
+      - $ref: '#/components/parameters/CaseId'
+    get:
+      tags: [Communication]
+      summary: Retrieve case details
+      responses:
+        '200':
+          description: Case
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Case'
+    put:
+      tags: [Communication]
+      summary: Replace case (internal)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CaseUpdateRequest'
+      responses:
+        '200':
+          description: Case updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Case'
+    patch:
+      tags: [Communication]
+      summary: Partially update case (internal)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CasePartialUpdateRequest'
+      responses:
+        '200':
+          description: Case updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Case'
+    delete:
+      tags: [Communication]
+      summary: Delete case (internal)
+      responses:
+        '204':
+          description: Case removed
+  /communication/messages/:
+    get:
+      tags: [Communication]
+      summary: List message threads visible to user
+      parameters:
+        - $ref: '#/components/parameters/SearchQuery'
+      responses:
+        '200':
+          description: Paged message threads
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedThreadList'
+    post:
+      tags: [Communication]
+      summary: Create a message thread
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageThreadCreateRequest'
+      responses:
+        '201':
+          description: Thread created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageThread'
+  /communication/messages/{threadId}/:
+    parameters:
+      - $ref: '#/components/parameters/ThreadId'
+    get:
+      tags: [Communication]
+      summary: Retrieve thread details
+      responses:
+        '200':
+          description: Thread
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageThread'
+    put:
+      tags: [Communication]
+      summary: Replace thread definition
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageThreadCreateRequest'
+      responses:
+        '200':
+          description: Thread updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageThread'
+    patch:
+      tags: [Communication]
+      summary: Partially update thread
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MessageThreadPartialUpdateRequest'
+      responses:
+        '200':
+          description: Thread updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageThread'
+    delete:
+      tags: [Communication]
+      summary: Delete thread (internal)
+      responses:
+        '204':
+          description: Thread removed
+  /communication/messages/{threadId}/messages/:
+    parameters:
+      - $ref: '#/components/parameters/ThreadId'
+    get:
+      tags: [Communication]
+      summary: List messages in a thread
+      responses:
+        '200':
+          description: Thread messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Message'
+    post:
+      tags: [Communication]
+      summary: Post message in thread
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MessageCreateRequest'
+      responses:
+        '201':
+          description: Message created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Message'
+  /communication/messages/broadcast/:
+    post:
+      tags: [Communication]
+      summary: Broadcast announcement via threads (internal)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/GlobalMessageBroadcastRequest'
+      responses:
+        '201':
+          description: Broadcast thread created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageThread'
+  /communication/announcements/:
+    get:
+      tags: [Communication]
+      summary: List announcements
+      parameters:
+        - in: query
+          name: requires_acknowledgement
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Announcements
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAnnouncementList'
+    post:
+      tags: [Communication]
+      summary: Publish announcement (internal)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnouncementCreateRequest'
+      responses:
+        '201':
+          description: Announcement created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Announcement'
+  /communication/announcements/{announcementId}/:
+    parameters:
+      - $ref: '#/components/parameters/AnnouncementId'
+    get:
+      tags: [Communication]
+      summary: Retrieve announcement
+      responses:
+        '200':
+          description: Announcement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Announcement'
+    put:
+      tags: [Communication]
+      summary: Replace announcement (internal)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnouncementCreateRequest'
+      responses:
+        '200':
+          description: Announcement updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Announcement'
+    patch:
+      tags: [Communication]
+      summary: Partially update announcement (internal)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnouncementPartialUpdateRequest'
+      responses:
+        '200':
+          description: Announcement updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Announcement'
+    delete:
+      tags: [Communication]
+      summary: Delete announcement (internal)
+      responses:
+        '204':
+          description: Announcement removed
+  /communication/announcements/{announcementId}/acknowledge/:
+    post:
+      tags: [Communication]
+      summary: Acknowledge an announcement
+      parameters:
+        - $ref: '#/components/parameters/AnnouncementId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnouncementAcknowledgeRequest'
+      responses:
+        '200':
+          description: Announcement with updated acknowledgement rate
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Announcement'
+  /communication/library/:
+    get:
+      tags: [Communication]
+      summary: Public library listing
+      security: []
+      parameters:
+        - in: query
+          name: category
+          schema:
+            $ref: '#/components/schemas/LibraryDocumentCategory'
+        - in: query
+          name: is_mandatory
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: Library documents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedLibraryDocumentList'
+  /communication/faq/:
+    get:
+      tags: [Communication]
+      summary: Public FAQ entries
+      security: []
+      responses:
+        '200':
+          description: FAQ list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/FaqEntry'
+  /admin/password-policy:
+    get:
+      tags: [Administration]
+      summary: Retrieve password policy (internal)
+      responses:
+        '200':
+          description: Password policy settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordPolicy'
+    put:
+      tags: [Administration]
+      summary: Update password policy (internal)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordPolicyUpdateRequest'
+      responses:
+        '200':
+          description: Updated policy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasswordPolicy'
+  /admin/audit-logs/:
+    get:
+      tags: [Administration]
+      summary: List audit log entries
+      parameters:
+        - in: query
+          name: severity
+          schema:
+            $ref: '#/components/schemas/AuditLogSeverity'
+        - in: query
+          name: actor
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedAuditLogList'
+  /admin/retention/:
+    get:
+      tags: [Administration]
+      summary: List retention policies
+      responses:
+        '200':
+          description: Retention policies
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRetentionPolicyList'
+    post:
+      tags: [Administration]
+      summary: Create retention policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataRetentionPolicyCreateRequest'
+      responses:
+        '201':
+          description: Policy created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataRetentionPolicy'
+  /admin/retention/{dataType}/:
+    parameters:
+      - $ref: '#/components/parameters/DataType'
+    get:
+      tags: [Administration]
+      summary: Retrieve retention policy by data type
+      responses:
+        '200':
+          description: Retention policy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataRetentionPolicy'
+    put:
+      tags: [Administration]
+      summary: Replace retention policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataRetentionPolicyUpdateRequest'
+      responses:
+        '200':
+          description: Policy updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataRetentionPolicy'
+    patch:
+      tags: [Administration]
+      summary: Partially update retention policy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DataRetentionPolicyPartialUpdateRequest'
+      responses:
+        '200':
+          description: Policy updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DataRetentionPolicy'
+    delete:
+      tags: [Administration]
+      summary: Delete retention policy
+      responses:
+        '204':
+          description: Policy removed
+  /admin/maintenance/:
+    get:
+      tags: [Administration]
+      summary: List maintenance windows
+      responses:
+        '200':
+          description: Maintenance windows
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedMaintenanceWindowList'
+    post:
+      tags: [Administration]
+      summary: Create maintenance window
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceWindowCreateRequest'
+      responses:
+        '201':
+          description: Maintenance window created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceWindow'
+  /admin/maintenance/{windowId}/:
+    parameters:
+      - $ref: '#/components/parameters/MaintenanceWindowId'
+    get:
+      tags: [Administration]
+      summary: Retrieve maintenance window
+      responses:
+        '200':
+          description: Maintenance window
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceWindow'
+    put:
+      tags: [Administration]
+      summary: Replace maintenance window
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceWindowUpdateRequest'
+      responses:
+        '200':
+          description: Maintenance window updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceWindow'
+    patch:
+      tags: [Administration]
+      summary: Partially update maintenance window
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MaintenanceWindowPartialUpdateRequest'
+      responses:
+        '200':
+          description: Maintenance window updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MaintenanceWindow'
+    delete:
+      tags: [Administration]
+      summary: Delete maintenance window
+      responses:
+        '204':
+          description: Maintenance window removed
+  /library/overview:
+    get:
+      tags: [Library]
+      summary: Overview widgets for library and FAQ
+      responses:
+        '200':
+          description: Documents and FAQ highlights
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LibraryOverviewResponse'
+  /library/search:
+    get:
+      tags: [Library]
+      summary: Search library documents
+      parameters:
+        - in: query
+          name: q
+          schema:
+            type: string
+            description: Search query string
+      responses:
+        '200':
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LibrarySearchResponse'
+  /library/documents:
+    post:
+      tags: [Library]
+      summary: Upload document to knowledge base (internal)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LibraryDocumentUploadRequest'
+      responses:
+        '201':
+          description: Library document stored
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LibraryDocument'
+  /library/documents/{documentId}:
+    delete:
+      tags: [Library]
+      summary: Delete library document (internal)
+      parameters:
+        - $ref: '#/components/parameters/LibraryDocumentId'
+      responses:
+        '204':
+          description: Document deleted
+  /library/qa:
+    post:
+      tags: [Library]
+      summary: Generate answer to a library question
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LibraryQARequest'
+      responses:
+        '200':
+          description: Generated answer with supporting documents
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LibraryQAResponse'
+        '503':
+          description: QA feature temporarily unavailable
+components:
+  securitySchemes:
+    TokenAuth:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: |
+        Include `Authorization: Token <key>` header. Obtain the key via `/auth/login`.
+  parameters:
+    EntityId:
+      name: entityId
+      in: path
+      required: true
+      schema:
+        type: integer
+    MembershipId:
+      name: membershipId
+      in: path
+      required: true
+      schema:
+        type: integer
+    AccessRequestId:
+      name: requestId
+      in: path
+      required: true
+      schema:
+        type: integer
+    AccessRequestLineId:
+      name: lineId
+      in: path
+      required: true
+      schema:
+        type: integer
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: integer
+    UserGroupId:
+      name: groupId
+      in: path
+      required: true
+      schema:
+        type: integer
+    ReportId:
+      name: reportId
+      in: path
+      required: true
+      schema:
+        type: integer
+    CaseId:
+      name: caseId
+      in: path
+      required: true
+      schema:
+        type: integer
+    ThreadId:
+      name: threadId
+      in: path
+      required: true
+      schema:
+        type: integer
+    AnnouncementId:
+      name: announcementId
+      in: path
+      required: true
+      schema:
+        type: integer
+    DataType:
+      name: dataType
+      in: path
+      required: true
+      schema:
+        type: string
+    MaintenanceWindowId:
+      name: windowId
+      in: path
+      required: true
+      schema:
+        type: integer
+    LibraryDocumentId:
+      name: documentId
+      in: path
+      required: true
+      schema:
+        type: integer
+    SearchQuery:
+      name: search
+      in: query
+      schema:
+        type: string
+      description: Free text search applied to supported fields for the resource
+    OrderingQuery:
+      name: ordering
+      in: query
+      schema:
+        type: string
+      description: Field name used for ordering, prepend with '-' for descending
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          example: ok
+    RegisterRequest:
+      type: object
+      required: [email, first_name, last_name, pesel, phone_number, user_type, role]
+      properties:
+        email:
+          type: string
+          format: email
+        first_name:
+          type: string
+        last_name:
+          type: string
+        pesel:
+          type: string
+          pattern: '^\\d{11}$'
+        phone_number:
+          type: string
+        user_type:
+          type: string
+          enum: [bank, fundusz_inwestycyjny, inne]
+          default: bank
+        role:
+          type: string
+          enum: [entity_admin, submitter]
+          default: entity_admin
+    RegisterResponse:
+      type: object
+      properties:
+        detail:
+          type: string
+          example: Link aktywacyjny został wysłany na podany adres e-mail.
+        user:
+          $ref: '#/components/schemas/User'
+    ActivateAccountRequest:
+      type: object
+      required: [uid, token, password, password_confirm]
+      properties:
+        uid:
+          type: string
+        token:
+          type: string
+        password:
+          type: string
+          format: password
+        password_confirm:
+          type: string
+          format: password
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        email:
+          type: string
+          format: email
+        first_name:
+          type: string
+        last_name:
+          type: string
+        role:
+          type: string
+          enum: [system_admin, supervisor, analyst, communication_officer, auditor, entity_admin, submitter, representative, read_only]
+        role_display:
+          type: string
+          readOnly: true
+        user_type:
+          type: string
+          enum: [bank, fundusz_inwestycyjny, inne]
+        pesel_masked:
+          type: string
+          readOnly: true
+        phone_number:
+          type: string
+        department:
+          type: string
+        position_title:
+          type: string
+        preferred_language:
+          type: string
+        is_active:
+          type: boolean
+        is_staff:
+          type: boolean
+          readOnly: true
+        is_internal:
+          type: boolean
+          readOnly: true
+        managed_entities:
+          type: array
+          items:
+            type: integer
+          readOnly: true
+    RoleDisplay:
+      type: object
+      properties:
+        value:
+          type: string
+        label:
+          type: string
+        description:
+          type: string
+    ProfileResponse:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+        memberships:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntityMembership'
+        session:
+          $ref: '#/components/schemas/UserSessionContext'
+    UserSessionContext:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        acting_entity:
+          allOf:
+            - $ref: '#/components/schemas/RegulatedEntity'
+          readOnly: true
+        acting_entity_id:
+          type: integer
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    UserSessionUpdateRequest:
+      type: object
+      required: [acting_entity_id]
+      properties:
+        acting_entity_id:
+          type: integer
+          nullable: true
+    NotificationPreference:
+      type: object
+      properties:
+        notify_via_email:
+          type: boolean
+        notify_via_sms:
+          type: boolean
+        daily_digest:
+          type: boolean
+        weekly_digest:
+          type: boolean
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    NotificationPreferenceUpdateRequest:
+      type: object
+      properties:
+        notify_via_email:
+          type: boolean
+        notify_via_sms:
+          type: boolean
+        daily_digest:
+          type: boolean
+        weekly_digest:
+          type: boolean
+    RegulatedEntityStatus:
+      type: string
+      enum: [active, suspended, decommissioned]
+    RegulatedEntity:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+        registration_number:
+          type: string
+        sector:
+          type: string
+        address:
+          type: string
+        postal_code:
+          type: string
+        city:
+          type: string
+        country:
+          type: string
+        contact_email:
+          type: string
+          format: email
+        contact_phone:
+          type: string
+        website:
+          type: string
+        status:
+          $ref: '#/components/schemas/RegulatedEntityStatus'
+        data_source:
+          type: string
+        last_verified_at:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    RegulatedEntityCreateRequest:
+      allOf:
+        - $ref: '#/components/schemas/RegulatedEntityUpdateRequest'
+    RegulatedEntityUpdateRequest:
+      type: object
+      required: [name, registration_number, sector, address, postal_code, city, country, contact_email, contact_phone, status]
+      properties:
+        name:
+          type: string
+        registration_number:
+          type: string
+        sector:
+          type: string
+        address:
+          type: string
+        postal_code:
+          type: string
+        city:
+          type: string
+        country:
+          type: string
+        contact_email:
+          type: string
+          format: email
+        contact_phone:
+          type: string
+        website:
+          type: string
+        status:
+          $ref: '#/components/schemas/RegulatedEntityStatus'
+        data_source:
+          type: string
+        notes:
+          type: string
+    RegulatedEntityPartialUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        registration_number:
+          type: string
+        sector:
+          type: string
+        address:
+          type: string
+        postal_code:
+          type: string
+        city:
+          type: string
+        country:
+          type: string
+        contact_email:
+          type: string
+          format: email
+        contact_phone:
+          type: string
+        website:
+          type: string
+        status:
+          $ref: '#/components/schemas/RegulatedEntityStatus'
+        data_source:
+          type: string
+        notes:
+          type: string
+    EntityMembershipRole:
+      type: string
+      enum: [admin, submitter, representative, viewer]
+    EntityMembership:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        user:
+          allOf:
+            - $ref: '#/components/schemas/User'
+          readOnly: true
+        entity:
+          allOf:
+            - $ref: '#/components/schemas/RegulatedEntity'
+          readOnly: true
+        role:
+          $ref: '#/components/schemas/EntityMembershipRole'
+        is_primary:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+    EntityMembershipCreateRequest:
+      type: object
+      required: [user_id, entity_id, role]
+      properties:
+        user_id:
+          type: integer
+        entity_id:
+          type: integer
+        role:
+          $ref: '#/components/schemas/EntityMembershipRole'
+        is_primary:
+          type: boolean
+    EntityMembershipUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/EntityMembershipCreateRequest'
+    EntityMembershipPartialUpdateRequest:
+      type: object
+      properties:
+        role:
+          $ref: '#/components/schemas/EntityMembershipRole'
+        is_primary:
+          type: boolean
+    AccessRequestStatus:
+      type: string
+      enum: [draft, new, approved, blocked, updated]
+    AccessRequestNextActor:
+      type: string
+      enum: [requester, entity_admin, uknf, none]
+    AccessRequestLineStatus:
+      type: string
+      enum: [pending, approved, blocked, needs_update]
+    AccessRequestLineNextActor:
+      type: string
+      enum: [requester, entity_admin, uknf, none]
+    AccessRequestPermissionCode:
+      type: string
+      enum: [reporting, cases, entity_admin]
+    AccessRequestPermissionStatus:
+      type: string
+      enum: [requested, granted, blocked]
+    AccessRequest:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        reference_code:
+          type: string
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/AccessRequestStatus'
+        next_actor:
+          $ref: '#/components/schemas/AccessRequestNextActor'
+        handled_by_uknf:
+          type: boolean
+        requester:
+          allOf:
+            - $ref: '#/components/schemas/User'
+          readOnly: true
+        requester_first_name:
+          type: string
+        requester_last_name:
+          type: string
+        requester_email:
+          type: string
+          format: email
+        requester_phone:
+          type: string
+        requester_pesel_masked:
+          type: string
+        justification:
+          type: string
+        decision_notes:
+          type: string
+        submitted_at:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+        decided_at:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+        decided_by:
+          $ref: '#/components/schemas/AccessRequestActor'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessRequestLine'
+          readOnly: true
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessRequestAttachment'
+          readOnly: true
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessRequestHistoryEntry'
+          readOnly: true
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessRequestMessage'
+          readOnly: true
+    AccessRequestActor:
+      type: object
+      nullable: true
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        name:
+          type: string
+    AccessRequestLine:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        entity:
+          $ref: '#/components/schemas/RegulatedEntity'
+        status:
+          $ref: '#/components/schemas/AccessRequestLineStatus'
+        next_actor:
+          $ref: '#/components/schemas/AccessRequestLineNextActor'
+        contact_email:
+          type: string
+          format: email
+          nullable: true
+        decision_notes:
+          type: string
+        decided_at:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+        decided_by:
+          $ref: '#/components/schemas/AccessRequestActor'
+          readOnly: true
+        permissions:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessRequestLinePermission'
+    AccessRequestLinePermission:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        code:
+          $ref: '#/components/schemas/AccessRequestPermissionCode'
+        code_display:
+          type: string
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/AccessRequestPermissionStatus'
+        status_display:
+          type: string
+          readOnly: true
+        decided_by:
+          $ref: '#/components/schemas/AccessRequestActor'
+          readOnly: true
+        decided_at:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+        notes:
+          type: string
+    AccessRequestAttachment:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        file:
+          type: string
+          format: uri
+          readOnly: true
+        description:
+          type: string
+        uploaded_by:
+          $ref: '#/components/schemas/AccessRequestActor'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+    AccessRequestHistoryEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        action:
+          type: string
+        from_status:
+          $ref: '#/components/schemas/AccessRequestStatus'
+        to_status:
+          $ref: '#/components/schemas/AccessRequestStatus'
+        payload:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        actor:
+          $ref: '#/components/schemas/AccessRequestActor'
+    AccessRequestMessage:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        body:
+          type: string
+        is_internal:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        sender:
+          $ref: '#/components/schemas/AccessRequestActor'
+          readOnly: true
+        attachments:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessRequestMessageAttachment'
+    AccessRequestMessageAttachment:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        file:
+          type: string
+          format: uri
+        uploaded_by:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+    AccessRequestUpdateRequest:
+      type: object
+      properties:
+        justification:
+          type: string
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessRequestLineInput'
+    AccessRequestLineInput:
+      type: object
+      required: [entity_id, permission_codes]
+      properties:
+        entity_id:
+          type: integer
+        contact_email:
+          type: string
+          format: email
+          nullable: true
+        permission_codes:
+          type: array
+          items:
+            $ref: '#/components/schemas/AccessRequestPermissionCode'
+    AccessRequestReturnRequest:
+      type: object
+      properties:
+        reason:
+          type: string
+    AccessRequestDecisionRequest:
+      type: object
+      properties:
+        notes:
+          type: string
+    AccessRequestMessagePostRequest:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+        is_internal:
+          type: boolean
+        attachments:
+          type: array
+          items:
+            type: string
+            format: binary
+    AccessRequestAttachmentUploadRequest:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+        description:
+          type: string
+    ContactSubmission:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        sender_name:
+          type: string
+        sender_email:
+          type: string
+          format: email
+        subject:
+          type: string
+        message:
+          type: string
+        entity:
+          $ref: '#/components/schemas/RegulatedEntity'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        handled_by:
+          allOf:
+            - $ref: '#/components/schemas/User'
+          readOnly: true
+        handled_at:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+        resolution_notes:
+          type: string
+          readOnly: true
+    ContactSubmissionCreateRequest:
+      type: object
+      required: [sender_name, sender_email, subject, message]
+      properties:
+        sender_name:
+          type: string
+        sender_email:
+          type: string
+          format: email
+        subject:
+          type: string
+        message:
+          type: string
+        entity:
+          type: integer
+          nullable: true
+    UserGroup:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          allOf:
+            - $ref: '#/components/schemas/User'
+          readOnly: true
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+          readOnly: true
+        members_count:
+          type: integer
+          readOnly: true
+    UserGroupCreateRequest:
+      type: object
+      required: [name, user_ids]
+      properties:
+        name:
+          type: string
+        user_ids:
+          type: array
+          items:
+            type: integer
+    UserGroupUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/UserGroupCreateRequest'
+    UserGroupPartialUpdateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        user_ids:
+          type: array
+          items:
+            type: integer
+    ReportStatus:
+      type: string
+      enum: [draft, submitted, processing, validated, validation_errors, technical_failure, timeout, disputed]
+    Report:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        entity:
+          $ref: '#/components/schemas/RegulatedEntity'
+        entity_id:
+          type: integer
+          writeOnly: true
+        submitted_by:
+          allOf:
+            - $ref: '#/components/schemas/User'
+          readOnly: true
+        title:
+          type: string
+        report_type:
+          type: string
+        period_start:
+          type: string
+          format: date
+        period_end:
+          type: string
+          format: date
+        status:
+          $ref: '#/components/schemas/ReportStatus'
+        submitted_at:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+        validated_at:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+        validation_errors:
+          type: string
+          nullable: true
+          readOnly: true
+        file_path:
+          type: string
+          readOnly: true
+        comments:
+          type: string
+        timeline:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReportTimelineEntry'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        validation:
+          type: object
+          nullable: true
+          additionalProperties: true
+          readOnly: true
+    ReportTimelineEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/ReportStatus'
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          allOf:
+            - $ref: '#/components/schemas/User'
+          readOnly: true
+    ReportCreateRequest:
+      type: object
+      required: [entity_id, title, report_type, period_start, period_end]
+      properties:
+        entity_id:
+          type: integer
+        title:
+          type: string
+        report_type:
+          type: string
+        period_start:
+          type: string
+          format: date
+        period_end:
+          type: string
+          format: date
+        comments:
+          type: string
+    ReportUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/ReportCreateRequest'
+    ReportPartialUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        report_type:
+          type: string
+        period_start:
+          type: string
+          format: date
+        period_end:
+          type: string
+          format: date
+        comments:
+          type: string
+        status:
+          $ref: '#/components/schemas/ReportStatus'
+    ReportUploadRequest:
+      type: object
+      required: [file]
+      properties:
+        file:
+          type: string
+          format: binary
+    ReportStatusUpdateRequest:
+      type: object
+      required: [status]
+      properties:
+        status:
+          $ref: '#/components/schemas/ReportStatus'
+        notes:
+          type: string
+    CaseStatus:
+      type: string
+      enum: [open, in_progress, responded, closed]
+    Case:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        entity:
+          $ref: '#/components/schemas/RegulatedEntity'
+        entity_id:
+          type: integer
+          writeOnly: true
+        reference_code:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/CaseStatus'
+        assigned_to:
+          allOf:
+            - $ref: '#/components/schemas/User'
+          readOnly: true
+        assigned_to_id:
+          type: integer
+          nullable: true
+          writeOnly: true
+        due_date:
+          type: string
+          format: date
+          nullable: true
+        opened_at:
+          type: string
+          format: date-time
+          readOnly: true
+        closed_at:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+        timeline:
+          type: array
+          items:
+            $ref: '#/components/schemas/CaseTimelineEntry'
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    CaseTimelineEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        status:
+          $ref: '#/components/schemas/CaseStatus'
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          allOf:
+            - $ref: '#/components/schemas/User'
+          readOnly: true
+    CaseCreateRequest:
+      type: object
+      required: [entity_id, reference_code, title]
+      properties:
+        entity_id:
+          type: integer
+        reference_code:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        assigned_to_id:
+          type: integer
+          nullable: true
+        due_date:
+          type: string
+          format: date
+          nullable: true
+    CaseUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/CaseCreateRequest'
+    CasePartialUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          $ref: '#/components/schemas/CaseStatus'
+        assigned_to_id:
+          type: integer
+          nullable: true
+        due_date:
+          type: string
+          format: date
+          nullable: true
+    MessageThread:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        entity:
+          $ref: '#/components/schemas/RegulatedEntity'
+        entity_id:
+          type: integer
+          nullable: true
+          writeOnly: true
+        subject:
+          type: string
+        created_by:
+          allOf:
+            - $ref: '#/components/schemas/User'
+          readOnly: true
+        is_internal_only:
+          type: boolean
+        is_global:
+          type: boolean
+        target_group:
+          allOf:
+            - $ref: '#/components/schemas/UserGroup'
+          readOnly: true
+        target_group_id:
+          type: integer
+          nullable: true
+          writeOnly: true
+        target_user:
+          allOf:
+            - $ref: '#/components/schemas/User'
+          readOnly: true
+        target_user_id:
+          type: integer
+          nullable: true
+          writeOnly: true
+        participants:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+          readOnly: true
+    MessageThreadCreateRequest:
+      type: object
+      required: [subject]
+      properties:
+        entity_id:
+          type: integer
+          nullable: true
+        subject:
+          type: string
+        is_internal_only:
+          type: boolean
+        target_group_id:
+          type: integer
+          nullable: true
+        target_user_id:
+          type: integer
+          nullable: true
+    MessageThreadPartialUpdateRequest:
+      type: object
+      properties:
+        subject:
+          type: string
+        is_internal_only:
+          type: boolean
+        target_group_id:
+          type: integer
+          nullable: true
+        target_user_id:
+          type: integer
+          nullable: true
+    Message:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        thread:
+          type: integer
+          readOnly: true
+        sender:
+          allOf:
+            - $ref: '#/components/schemas/User'
+          readOnly: true
+        recipient:
+          allOf:
+            - $ref: '#/components/schemas/User'
+          readOnly: true
+        body:
+          type: string
+        attachment:
+          type: object
+          nullable: true
+          properties:
+            url:
+              type: string
+              format: uri
+            name:
+              type: string
+        is_internal_note:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+    MessageCreateRequest:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: string
+        is_internal_note:
+          type: boolean
+        attachment:
+          type: string
+          format: binary
+    GlobalMessageBroadcastRequest:
+      type: object
+      required: [subject, body, target_type]
+      properties:
+        subject:
+          type: string
+        body:
+          type: string
+        target_type:
+          type: string
+          enum: [group, user]
+        group:
+          type: integer
+          nullable: true
+        user:
+          type: integer
+          nullable: true
+        attachment:
+          type: string
+          format: binary
+    Announcement:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+        summary:
+          type: string
+        content:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+          readOnly: true
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        requires_acknowledgement:
+          type: boolean
+        target_roles:
+          type: array
+          items:
+            type: string
+        created_by:
+          allOf:
+            - $ref: '#/components/schemas/User'
+          readOnly: true
+        acknowledgement_rate:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+          readOnly: true
+    AnnouncementCreateRequest:
+      type: object
+      required: [title, summary, content]
+      properties:
+        title:
+          type: string
+        summary:
+          type: string
+        content:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        requires_acknowledgement:
+          type: boolean
+        target_roles:
+          type: array
+          items:
+            type: string
+    AnnouncementPartialUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        summary:
+          type: string
+        content:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+          nullable: true
+        requires_acknowledgement:
+          type: boolean
+        target_roles:
+          type: array
+          items:
+            type: string
+    AnnouncementAcknowledgeRequest:
+      type: object
+      properties:
+        acknowledged:
+          type: boolean
+    LibraryDocumentCategory:
+      type: string
+      enum: [reporting, supervision, legal, faq]
+    LibraryDocument:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+        category:
+          $ref: '#/components/schemas/LibraryDocumentCategory'
+        version:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+          readOnly: true
+        description:
+          type: string
+        document_url:
+          type: string
+          readOnly: true
+        is_mandatory:
+          type: boolean
+        uploaded_at:
+          type: string
+          format: date-time
+          readOnly: true
+    LibraryDocumentUploadRequest:
+      type: object
+      required: [file]
+      properties:
+        title:
+          type: string
+        category:
+          $ref: '#/components/schemas/LibraryDocumentCategory'
+        version:
+          type: string
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        description:
+          type: string
+        file:
+          type: string
+          format: binary
+        is_mandatory:
+          type: boolean
+    FaqEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        question:
+          type: string
+        answer:
+          type: string
+        category:
+          type: string
+        order:
+          type: integer
+        is_active:
+          type: boolean
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    LibraryOverviewResponse:
+      type: object
+      properties:
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/LibraryDocument'
+        faq:
+          type: array
+          items:
+            $ref: '#/components/schemas/FaqEntry'
+    LibrarySearchResponse:
+      type: object
+      properties:
+        query:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LibraryDocument'
+    LibraryQARequest:
+      type: object
+      required: [question]
+      properties:
+        question:
+          type: string
+          maxLength: 2000
+    LibraryQAResponse:
+      type: object
+      properties:
+        question:
+          type: string
+        answer:
+          type: string
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/LibraryDocument'
+    PasswordPolicy:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        min_length:
+          type: integer
+        require_uppercase:
+          type: boolean
+        require_lowercase:
+          type: boolean
+        require_numbers:
+          type: boolean
+        require_special:
+          type: boolean
+        password_expiry_days:
+          type: integer
+        reuse_history:
+          type: integer
+        lockout_threshold:
+          type: integer
+        lockout_duration_minutes:
+          type: integer
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PasswordPolicyUpdateRequest:
+      type: object
+      properties:
+        min_length:
+          type: integer
+        require_uppercase:
+          type: boolean
+        require_lowercase:
+          type: boolean
+        require_numbers:
+          type: boolean
+        require_special:
+          type: boolean
+        password_expiry_days:
+          type: integer
+        reuse_history:
+          type: integer
+        lockout_threshold:
+          type: integer
+        lockout_duration_minutes:
+          type: integer
+    AuditLogSeverity:
+      type: string
+      enum: [info, warning, error, critical]
+    AuditLogEntry:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        action:
+          type: string
+        actor_email:
+          type: string
+          format: email
+        severity:
+          $ref: '#/components/schemas/AuditLogSeverity'
+        metadata:
+          type: object
+          additionalProperties: true
+        ip_address:
+          type: string
+        user_agent:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+    DataRetentionPolicy:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        data_type:
+          type: string
+        retention_period_days:
+          type: integer
+        description:
+          type: string
+        updated_at:
+          type: string
+          format: date-time
+          readOnly: true
+    DataRetentionPolicyCreateRequest:
+      type: object
+      required: [data_type, retention_period_days, description]
+      properties:
+        data_type:
+          type: string
+        retention_period_days:
+          type: integer
+        description:
+          type: string
+    DataRetentionPolicyUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/DataRetentionPolicyCreateRequest'
+    DataRetentionPolicyPartialUpdateRequest:
+      type: object
+      properties:
+        retention_period_days:
+          type: integer
+        description:
+          type: string
+    MaintenanceWindow:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+        description:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        created_by:
+          allOf:
+            - $ref: '#/components/schemas/User'
+          readOnly: true
+    MaintenanceWindowCreateRequest:
+      type: object
+      required: [title, start_time, end_time]
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+    MaintenanceWindowUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/MaintenanceWindowCreateRequest'
+    MaintenanceWindowPartialUpdateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+    PaginatedRegulatedEntityList:
+      type: object
+      properties:
+        count:
+          type: integer
+        next:
+          type: string
+          format: uri
+          nullable: true
+        previous:
+          type: string
+          format: uri
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RegulatedEntity'
+    PaginatedMembershipList:
+      allOf:
+        - $ref: '#/components/schemas/Pagination'
+        - type: object
+          properties:
+            results:
+              type: array
+              items:
+                $ref: '#/components/schemas/EntityMembership'
+    PaginatedAccessRequestList:
+      allOf:
+        - $ref: '#/components/schemas/Pagination'
+        - type: object
+          properties:
+            results:
+              type: array
+              items:
+                $ref: '#/components/schemas/AccessRequest'
+    PaginatedContactSubmissionList:
+      allOf:
+        - $ref: '#/components/schemas/Pagination'
+        - type: object
+          properties:
+            results:
+              type: array
+              items:
+                $ref: '#/components/schemas/ContactSubmission'
+    PaginatedUserList:
+      allOf:
+        - $ref: '#/components/schemas/Pagination'
+        - type: object
+          properties:
+            results:
+              type: array
+              items:
+                $ref: '#/components/schemas/User'
+    PaginatedUserGroupList:
+      allOf:
+        - $ref: '#/components/schemas/Pagination'
+        - type: object
+          properties:
+            results:
+              type: array
+              items:
+                $ref: '#/components/schemas/UserGroup'
+    PaginatedReportList:
+      allOf:
+        - $ref: '#/components/schemas/Pagination'
+        - type: object
+          properties:
+            results:
+              type: array
+              items:
+                $ref: '#/components/schemas/Report'
+    PaginatedCaseList:
+      allOf:
+        - $ref: '#/components/schemas/Pagination'
+        - type: object
+          properties:
+            results:
+              type: array
+              items:
+                $ref: '#/components/schemas/Case'
+    PaginatedThreadList:
+      allOf:
+        - $ref: '#/components/schemas/Pagination'
+        - type: object
+          properties:
+            results:
+              type: array
+              items:
+                $ref: '#/components/schemas/MessageThread'
+    PaginatedAnnouncementList:
+      allOf:
+        - $ref: '#/components/schemas/Pagination'
+        - type: object
+          properties:
+            results:
+              type: array
+              items:
+                $ref: '#/components/schemas/Announcement'
+    PaginatedLibraryDocumentList:
+      allOf:
+        - $ref: '#/components/schemas/Pagination'
+        - type: object
+          properties:
+            results:
+              type: array
+              items:
+                $ref: '#/components/schemas/LibraryDocument'
+    PaginatedAuditLogList:
+      allOf:
+        - $ref: '#/components/schemas/Pagination'
+        - type: object
+          properties:
+            results:
+              type: array
+              items:
+                $ref: '#/components/schemas/AuditLogEntry'
+    PaginatedRetentionPolicyList:
+      allOf:
+        - $ref: '#/components/schemas/Pagination'
+        - type: object
+          properties:
+            results:
+              type: array
+              items:
+                $ref: '#/components/schemas/DataRetentionPolicy'
+    PaginatedMaintenanceWindowList:
+      allOf:
+        - $ref: '#/components/schemas/Pagination'
+        - type: object
+          properties:
+            results:
+              type: array
+              items:
+                $ref: '#/components/schemas/MaintenanceWindow'
+    Pagination:
+      type: object
+      properties:
+        count:
+          type: integer
+        next:
+          type: string
+          format: uri
+          nullable: true
+        previous:
+          type: string
+          format: uri
+          nullable: true
